@@ -15,7 +15,7 @@ import type React from "react"
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { getBrowserClient } from "@/lib/supabase"
-import type { User, AuthError } from "@supabase/supabase-js"
+import type { User } from "@supabase/supabase-js"
 
 type AuthContextType = {
   user: User | null
@@ -38,28 +38,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = getBrowserClient()
 
   // Sign in function
-  const signIn = useCallback(async (email: string, password: string) => {
-    if (!supabase) return { error: new Error("Supabase client not initialized") }
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      if (!supabase) return { error: new Error("Supabase client not initialized") }
 
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
 
-      if (error) {
-        return { error: new Error(error.message) }
+        if (error) {
+          return { error: new Error(error.message) }
+        }
+
+        if (data.user) {
+          setUser(data.user)
+        }
+
+        return { error: null }
+      } catch (err) {
+        return { error: err instanceof Error ? err : new Error("Unknown error") }
       }
-
-      if (data.user) {
-        setUser(data.user)
-      }
-
-      return { error: null }
-    } catch (err) {
-      return { error: err instanceof Error ? err : new Error("Unknown error") }
-    }
-  }, [supabase])
+    },
+    [supabase],
+  )
 
   // Sign out function
   const signOut = useCallback(async () => {
@@ -83,7 +86,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initializeAuth = async () => {
       try {
         // Get initial session
-        const { data: { user: initialUser } } = await supabase.auth.getUser()
+        const {
+          data: { user: initialUser },
+        } = await supabase.auth.getUser()
         setUser(initialUser)
         setIsInitialized(true)
       } catch (error) {

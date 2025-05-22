@@ -1,17 +1,17 @@
 /**
  * RAG Chat API Route
- * 
+ *
  * Purpose: Main chat endpoint for RAG (Retrieval-Augmented Generation) functionality
- * 
+ *
  * Features:
  * - Processes user messages and generates embeddings
  * - Searches for relevant context in Pinecone vector database
  * - Builds prompts with retrieved context
  * - Streams AI responses using OpenAI GPT-4
- * 
+ *
  * Security: Requires valid Supabase authentication
  * Runtime: Vercel Edge Runtime for optimal performance
- * 
+ *
  * Request Format:
  * POST /api/chat
  * {
@@ -22,7 +22,7 @@
  *     filter?: object      // Pinecone metadata filter
  *   }
  * }
- * 
+ *
  * Response: Streaming text response from OpenAI
  */
 

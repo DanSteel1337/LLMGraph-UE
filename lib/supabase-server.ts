@@ -1,8 +1,7 @@
 /**
  * FINALIZED AUTHENTICATION SYSTEM - DO NOT MODIFY
  *
- * This file contains ONLY server-side Supabase clients.
- * This is separated from the main supabase.ts to avoid Next.js build conflicts.
+ * This file contains server-side Supabase clients.
  *
  * Enhanced version with better error handling and cleanup
  */
