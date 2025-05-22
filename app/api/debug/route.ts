@@ -15,7 +15,7 @@
 
 import { type NextRequest, NextResponse } from "next/server"
 import { validateEnv } from "../../../lib/utils/env"
-import { createClient } from "../../../lib/pinecone/client"
+import { PineconeRestClient } from "../../../lib/pinecone/rest-client"
 import { createEmbedding } from "../../../lib/ai/embeddings"
 import { kv } from "@vercel/kv"
 import { createEdgeClient } from "../../../lib/supabase-server"
@@ -72,7 +72,21 @@ export async function GET(request: NextRequest) {
 async function testPinecone() {
   try {
     const startTime = Date.now()
-    const pineconeClient = createClient()
+
+    // Log environment variables for debugging (will be removed in production)
+    console.log("Debug - Pinecone Environment Variables:", {
+      apiKey: process.env.PINECONE_API_KEY ? "Set (redacted)" : "Not set",
+      indexName: process.env.PINECONE_INDEX_NAME,
+      host: process.env.PINECONE_HOST,
+    })
+
+    // Create a new client instance specifically for debugging
+    // This ensures we're using the latest environment variables
+    const pineconeClient = new PineconeRestClient({
+      apiKey: process.env.PINECONE_API_KEY!,
+      indexName: process.env.PINECONE_INDEX_NAME!,
+      host: process.env.PINECONE_HOST!,
+    })
 
     // Test 1: Get index stats
     let statsResult

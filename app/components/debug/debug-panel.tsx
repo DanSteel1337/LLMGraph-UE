@@ -193,6 +193,16 @@ interface TestResultCardProps {
 }
 
 function TestResultCard({ title, status, latency, data }: TestResultCardProps) {
+  // Extract Pinecone configuration if this is the Pinecone test
+  const isPineconeTest = title.toLowerCase().includes("pinecone")
+  const pineconeConfig = isPineconeTest
+    ? {
+        host: process.env.PINECONE_HOST || "Not set",
+        indexName: process.env.PINECONE_INDEX_NAME || "Not set",
+        apiKeySet: !!process.env.PINECONE_API_KEY,
+      }
+    : null
+
   return (
     <Card>
       <CardHeader>
@@ -203,6 +213,15 @@ function TestResultCard({ title, status, latency, data }: TestResultCardProps) {
           </CustomBadge>
         </div>
         {latency && <CardDescription>Latency: {latency}ms</CardDescription>}
+        {isPineconeTest && (
+          <CardDescription className="mt-2">
+            <div className="text-xs text-muted-foreground">
+              <div>Host: {pineconeConfig?.host}</div>
+              <div>Index: {pineconeConfig?.indexName}</div>
+              <div>API Key: {pineconeConfig?.apiKeySet ? "Set" : "Not set"}</div>
+            </div>
+          </CardDescription>
+        )}
       </CardHeader>
       <CardContent>
         {status === "error" ? (

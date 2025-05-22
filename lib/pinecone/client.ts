@@ -25,7 +25,14 @@ export type {
 let pineconeClient: PineconeRestClient | null = null
 
 export function createClient(): PineconeRestClient {
-  validateEnv()
+  validateEnv(["PINECONE"])
+
+  // Log Pinecone configuration (without exposing the API key)
+  console.log("Creating Pinecone client with:", {
+    indexName: process.env.PINECONE_INDEX_NAME,
+    host: process.env.PINECONE_HOST,
+    apiKeySet: !!process.env.PINECONE_API_KEY,
+  })
 
   if (!pineconeClient) {
     pineconeClient = new PineconeRestClient({

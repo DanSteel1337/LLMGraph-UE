@@ -123,22 +123,41 @@ export class PineconeRestClient {
     return retryPineconeOperation(async () => {
       const body = namespace ? { namespace } : {}
 
-      const response = await fetch(`${this.baseUrl}/describe_index_stats`, {
-        method: "POST",
-        headers: {
-          "Api-Key": this.apiKey,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(body),
-      })
+      try {
+        const response = await fetch(`${this.baseUrl}/describe_index_stats`, {
+          method: "POST",
+          headers: {
+            "Api-Key": this.apiKey,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(body),
+        })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Pinecone describe_index_stats failed: ${response.status} - ${errorText}`)
+        if (!response.ok) {
+          const errorText = await response.text()
+          const errorMessage = `Pinecone describe_index_stats failed: ${response.status} - ${errorText}`
+
+          // Log detailed error information
+          console.error("Pinecone API Error:", {
+            status: response.status,
+            url: `${this.baseUrl}/describe_index_stats`,
+            error: errorText,
+            indexName: this.indexName,
+            // Don't log the API key
+          })
+
+          throw new Error(errorMessage)
+        }
+
+        return await response.json()
+      } catch (error) {
+        // Enhance error with more context
+        if (error instanceof Error) {
+          error.message = `Pinecone API Error (${this.indexName}@${this.baseUrl}): ${error.message}`
+        }
+        throw error
       }
-
-      return await response.json()
     })
   }
 }

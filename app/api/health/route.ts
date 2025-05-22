@@ -36,9 +36,25 @@ export async function GET(request: NextRequest) {
     try {
       const pineconeClient = createClient()
       const indexes = await pineconeClient.listIndexes()
-      services.pinecone = { status: "ok", indexes: indexes.indexes?.map((i) => i.name) }
+      services.pinecone = {
+        status: "ok",
+        indexes: indexes.indexes?.map((i) => i.name),
+        config: {
+          host: process.env.PINECONE_HOST,
+          indexName: process.env.PINECONE_INDEX_NAME,
+          apiKeySet: !!process.env.PINECONE_API_KEY,
+        },
+      }
     } catch (error) {
-      services.pinecone = { status: "error", message: error instanceof Error ? error.message : "Unknown error" }
+      services.pinecone = {
+        status: "error",
+        message: error instanceof Error ? error.message : "Unknown error",
+        config: {
+          host: process.env.PINECONE_HOST,
+          indexName: process.env.PINECONE_INDEX_NAME,
+          apiKeySet: !!process.env.PINECONE_API_KEY,
+        },
+      }
     }
 
     // Check Supabase
