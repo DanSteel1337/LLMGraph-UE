@@ -26,9 +26,7 @@ export class PineconeRestClient {
   constructor(config: PineconeConfig) {
     this.apiKey = config.apiKey
     this.indexName = config.indexName
-
-    // Construct the base URL for Pinecone API
-    this.baseUrl = `https://${this.indexName}.svc.${this.indexName}.pinecone.io`
+    this.baseUrl = `https://${config.host}`
   }
 
   /**

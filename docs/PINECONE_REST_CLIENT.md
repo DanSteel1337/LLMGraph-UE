@@ -25,6 +25,14 @@ The REST client is implemented in `lib/pinecone/rest-client.ts` and provides the
 - `listIndexes`: List available indexes (simplified implementation)
 - `describeIndexStats`: Get statistics about the index
 
+## Configuration
+
+The REST client requires the following environment variables:
+
+- `PINECONE_API_KEY`: Your Pinecone API key
+- `PINECONE_INDEX_NAME`: The name of your Pinecone index
+- `PINECONE_HOST`: The host URL for your Pinecone index (e.g., `my-index-abc123.svc.us-east-1-aws.pinecone.io`)
+
 ## Usage
 
 The REST client is used through the singleton pattern implemented in `lib/pinecone/client.ts`:

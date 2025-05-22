@@ -67,4 +67,5 @@ export interface PineconeIndexStats {
 export interface PineconeConfig {
   apiKey: string
   indexName: string
+  host: string
 }

@@ -31,6 +31,7 @@ export function createClient(): PineconeRestClient {
     pineconeClient = new PineconeRestClient({
       apiKey: process.env.PINECONE_API_KEY!,
       indexName: process.env.PINECONE_INDEX_NAME!,
+      host: process.env.PINECONE_HOST!,
     })
   }
 
