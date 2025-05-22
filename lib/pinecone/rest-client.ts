@@ -26,7 +26,10 @@ export class PineconeRestClient {
   constructor(config: PineconeConfig) {
     this.apiKey = config.apiKey
     this.indexName = config.indexName
-    this.baseUrl = `https://${config.host}`
+
+    // Strip any protocol prefix from the host
+    const host = config.host.replace(/^(https?:\/\/)/, "")
+    this.baseUrl = `https://${host}`
   }
 
   /**

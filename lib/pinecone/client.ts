@@ -24,13 +24,20 @@ export type {
 
 let pineconeClient: PineconeRestClient | null = null
 
+function sanitizeHost(host: string): string {
+  // Remove any protocol prefix (http:// or https://)
+  return host.replace(/^(https?:\/\/)/, "")
+}
+
 export function createClient(): PineconeRestClient {
   validateEnv(["PINECONE"])
 
   // Log Pinecone configuration (without exposing the API key)
+  const host = sanitizeHost(process.env.PINECONE_HOST!)
+
   console.log("Creating Pinecone client with:", {
     indexName: process.env.PINECONE_INDEX_NAME,
-    host: process.env.PINECONE_HOST,
+    host: host,
     apiKeySet: !!process.env.PINECONE_API_KEY,
   })
 
@@ -38,7 +45,7 @@ export function createClient(): PineconeRestClient {
     pineconeClient = new PineconeRestClient({
       apiKey: process.env.PINECONE_API_KEY!,
       indexName: process.env.PINECONE_INDEX_NAME!,
-      host: process.env.PINECONE_HOST!,
+      host: host,
     })
   }
 

@@ -23,6 +23,12 @@ import { retry } from "../../../lib/utils/retry"
 
 export const runtime = "edge"
 
+// Add this function at the top of the file, after the imports
+function sanitizeHost(host: string): string {
+  // Remove any protocol prefix (http:// or https://)
+  return host.replace(/^(https?:\/\/)/, "")
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Validate only the environment variables needed for this route
@@ -73,11 +79,14 @@ async function testPinecone() {
   try {
     const startTime = Date.now()
 
+    // Sanitize the host value
+    const host = sanitizeHost(process.env.PINECONE_HOST!)
+
     // Log environment variables for debugging (will be removed in production)
     console.log("Debug - Pinecone Environment Variables:", {
       apiKey: process.env.PINECONE_API_KEY ? "Set (redacted)" : "Not set",
       indexName: process.env.PINECONE_INDEX_NAME,
-      host: process.env.PINECONE_HOST,
+      host: host, // Use sanitized host
     })
 
     // Create a new client instance specifically for debugging
@@ -85,7 +94,7 @@ async function testPinecone() {
     const pineconeClient = new PineconeRestClient({
       apiKey: process.env.PINECONE_API_KEY!,
       indexName: process.env.PINECONE_INDEX_NAME!,
-      host: process.env.PINECONE_HOST!,
+      host: host, // Use sanitized host
     })
 
     // Test 1: Get index stats

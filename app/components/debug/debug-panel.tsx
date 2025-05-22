@@ -193,11 +193,16 @@ interface TestResultCardProps {
 }
 
 function TestResultCard({ title, status, latency, data }: TestResultCardProps) {
+  // Function to sanitize host by removing protocol
+  const sanitizeHost = (host: string | undefined) => {
+    return host ? host.replace(/^(https?:\/\/)/, "") : "Not set"
+  }
+
   // Extract Pinecone configuration if this is the Pinecone test
   const isPineconeTest = title.toLowerCase().includes("pinecone")
   const pineconeConfig = isPineconeTest
     ? {
-        host: process.env.PINECONE_HOST || "Not set",
+        host: sanitizeHost(process.env.PINECONE_HOST),
         indexName: process.env.PINECONE_INDEX_NAME || "Not set",
         apiKeySet: !!process.env.PINECONE_API_KEY,
       }

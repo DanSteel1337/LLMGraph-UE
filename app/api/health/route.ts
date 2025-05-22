@@ -20,6 +20,11 @@ import { createEdgeClient } from "../../../lib/supabase-server"
 
 export const runtime = "edge"
 
+function sanitizeHost(host: string): string {
+  // Remove any protocol prefix (http:// or https://)
+  return host ? host.replace(/^(https?:\/\/)/, "") : host
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Don't validate env variables here since we're checking their status
@@ -40,7 +45,7 @@ export async function GET(request: NextRequest) {
         status: "ok",
         indexes: indexes.indexes?.map((i) => i.name),
         config: {
-          host: process.env.PINECONE_HOST,
+          host: sanitizeHost(process.env.PINECONE_HOST || ""),
           indexName: process.env.PINECONE_INDEX_NAME,
           apiKeySet: !!process.env.PINECONE_API_KEY,
         },
@@ -50,7 +55,7 @@ export async function GET(request: NextRequest) {
         status: "error",
         message: error instanceof Error ? error.message : "Unknown error",
         config: {
-          host: process.env.PINECONE_HOST,
+          host: sanitizeHost(process.env.PINECONE_HOST || ""),
           indexName: process.env.PINECONE_INDEX_NAME,
           apiKeySet: !!process.env.PINECONE_API_KEY,
         },
