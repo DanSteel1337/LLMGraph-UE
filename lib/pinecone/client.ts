@@ -7,7 +7,7 @@
  * Services: Pinecone
  */
 import { Pinecone } from "@pinecone-database/pinecone"
-import { validateEnv } from "../utils/env"
+import { validateEnv } from "@/lib/utils/env"
 
 let pineconeClient: Pinecone | null = null
 

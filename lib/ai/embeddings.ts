@@ -6,7 +6,7 @@
  * Runtime context: Edge Function
  * Services: OpenAI
  */
-import { retry } from "../utils/retry"
+import { retry } from "@/lib/utils/retry"
 
 export async function createEmbedding(text: string): Promise<number[]> {
   const response = await retry(

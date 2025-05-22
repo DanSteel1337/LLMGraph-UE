@@ -7,7 +7,7 @@
  * Services: OpenAI
  */
 import type { Message } from "ai"
-import type { SearchResult } from "../pinecone/search"
+import type { SearchResult } from "@/lib/pinecone/search"
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant"

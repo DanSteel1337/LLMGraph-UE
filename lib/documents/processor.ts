@@ -7,8 +7,8 @@
  * Services: OpenAI (for embeddings), Pinecone (for vector storage)
  */
 import { Pinecone } from "@pinecone-database/pinecone"
-import { chunkDocument } from "./chunker"
-import { createEmbeddingBatch } from "../ai/embeddings"
+import { chunkDocument } from "@/lib/documents/chunker"
+import { createEmbeddingBatch } from "@/lib/ai/embeddings"
 import { kv } from "@vercel/kv"
 
 export async function processDocument(
