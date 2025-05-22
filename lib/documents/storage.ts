@@ -8,7 +8,7 @@
  */
 import { del } from "@vercel/blob"
 import { kv } from "@vercel/kv"
-import { Pinecone } from "@pinecone-database/pinecone"
+import { createClient } from "../pinecone/client"
 
 export async function getDocuments() {
   const keys = await kv.keys("document:*")
@@ -44,14 +44,10 @@ export async function deleteDocument(id: string) {
   }
 
   // Delete vectors from Pinecone
-  const pinecone = new Pinecone({
-    apiKey: process.env.PINECONE_API_KEY!,
-  })
-
-  const index = pinecone.index(process.env.PINECONE_INDEX_NAME!)
+  const pinecone = createClient()
 
   // Delete all vectors with matching documentId
-  await index.deleteMany({
+  await pinecone.delete({
     filter: {
       documentId: { $eq: id },
     },

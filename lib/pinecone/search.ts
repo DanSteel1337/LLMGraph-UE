@@ -7,7 +7,7 @@
  * Runtime context: Edge Function
  * Services: Pinecone
  */
-import type { Pinecone } from "@pinecone-database/pinecone"
+import type { PineconeRestClient } from "./rest-client"
 
 export interface SearchResult {
   id: string
@@ -24,13 +24,11 @@ export interface SearchOptions {
 }
 
 export async function searchVectors(
-  pineconeClient: Pinecone,
+  pineconeClient: PineconeRestClient,
   embedding: number[],
   options: SearchOptions = {},
 ): Promise<SearchResult[]> {
   const { topK = 5, filter, includeMetadata = true, hybridSearch = false } = options
-
-  const index = pineconeClient.index(process.env.PINECONE_INDEX_NAME!)
 
   const queryParams: any = {
     vector: embedding,
@@ -42,7 +40,7 @@ export async function searchVectors(
     queryParams.filter = filter
   }
 
-  const results = await index.query(queryParams)
+  const results = await pineconeClient.query(queryParams)
 
   // Transform results
   const searchResults: SearchResult[] =

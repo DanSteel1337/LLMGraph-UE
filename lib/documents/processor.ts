@@ -6,10 +6,10 @@
  * Runtime context: Edge Function
  * Services: OpenAI (for embeddings), Pinecone (for vector storage)
  */
-import { Pinecone } from "@pinecone-database/pinecone"
-import { chunkDocument } from "@/lib/documents/chunker"
-import { createEmbeddingBatch } from "@/lib/ai/embeddings"
+import { chunkDocument } from "./chunker"
+import { createEmbeddingBatch } from "../ai/embeddings"
 import { kv } from "@vercel/kv"
+import { createClient } from "../pinecone/client"
 
 export async function processDocument(
   documentId: string,
@@ -67,17 +67,13 @@ export async function processDocument(
   await kv.set(`document:${documentId}:vectors`, vectors.length)
 
   // Store vectors in Pinecone
-  const pinecone = new Pinecone({
-    apiKey: process.env.PINECONE_API_KEY!,
-  })
-
-  const index = pinecone.index(process.env.PINECONE_INDEX_NAME!)
+  const pinecone = createClient()
 
   // Upsert vectors in batches
   const batchSize = 50 // Changed from 100 to 50 to comply with Edge function limits
   for (let i = 0; i < vectors.length; i += batchSize) {
     const batch = vectors.slice(i, i + batchSize)
-    await index.upsert(batch)
+    await pinecone.upsert(batch)
   }
 
   // Update processing status

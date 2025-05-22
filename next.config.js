@@ -2,7 +2,6 @@
  * Purpose: Next.js configuration
  * Logic:
  * - Configures Next.js
- * - Adds Webpack config to handle Pinecone Edge Runtime compatibility
  * Runtime context: Build-time
  */
 /** @type {import('next').NextConfig} */
@@ -12,8 +11,6 @@ const nextConfig = {
     serverActions: {
       enabled: true,
     },
-    // Add Pinecone to external packages to prevent bundling issues
-    serverExternalPackages: ["@pinecone-database/pinecone"],
   },
   eslint: {
     ignoreDuringBuilds: true,
@@ -25,7 +22,7 @@ const nextConfig = {
     unoptimized: true,
   },
   webpack: (config, { isServer, nextRuntime }) => {
-    // Handle Pinecone Edge Runtime compatibility
+    // General polyfills for Edge Runtime
     if (nextRuntime === "edge") {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -46,7 +43,7 @@ const nextConfig = {
       }
     }
 
-    // Exclude problematic Pinecone modules from client-side bundles
+    // Polyfills for client-side
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -65,12 +62,6 @@ const nextConfig = {
         assert: false,
         events: false,
       }
-    }
-
-    // Add a specific alias for Pinecone to ensure the correct version is used
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      "@pinecone-database/pinecone": require.resolve("@pinecone-database/pinecone"),
     }
 
     return config

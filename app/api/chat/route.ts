@@ -11,30 +11,17 @@
  *
  * Security: Requires valid Supabase authentication
  * Runtime: Vercel Edge Runtime for optimal performance
- *
- * Request Format:
- * POST /api/chat
- * {
- *   messages: Message[],    // Chat message history
- *   options?: {
- *     topK?: number,        // Number of chunks to retrieve (default: 5)
- *     temperature?: number, // AI response randomness (default: 0.7)
- *     filter?: object      // Pinecone metadata filter
- *   }
- * }
- *
- * Response: Streaming text response from OpenAI
  */
 
 import type { NextRequest } from "next/server"
 import { StreamingTextResponse } from "ai"
 import { OpenAIStream } from "ai"
-import { validateEnv } from "@/lib/utils/env"
-import { searchVectors } from "@/lib/pinecone/search"
-import { buildPrompt } from "@/lib/ai/prompts"
-import { createEmbedding } from "@/lib/ai/embeddings"
-import { createClient } from "@/lib/pinecone/client"
-import { createEdgeClient } from "@/lib/supabase-server"
+import { validateEnv } from "../../../lib/utils/env"
+import { searchVectors } from "../../../lib/pinecone/search"
+import { buildPrompt } from "../../../lib/ai/prompts"
+import { createEmbedding } from "../../../lib/ai/embeddings"
+import { createClient } from "../../../lib/pinecone/client"
+import { createEdgeClient } from "../../../lib/supabase-server"
 
 export const runtime = "edge"
 

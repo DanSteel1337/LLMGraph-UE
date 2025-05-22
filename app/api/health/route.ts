@@ -1,54 +1,22 @@
 /**
  * Health Check API Route
- * 
+ *
  * Purpose: Monitors the health and connectivity of all system services
- * 
+ *
  * Features:
  * - Tests connectivity to Pinecone vector database
  * - Validates Supabase authentication service
  * - Checks Vercel KV storage availability
  * - Returns comprehensive service status
  * - No authentication required (public health endpoint)
- * 
+ *
  * Runtime: Vercel Edge Runtime for fast response times
- * 
- * Request Format:
- * GET /api/health
- * 
- * Response Format:
- * {
- *   api: { status: "ok" },
- *   pinecone: { 
- *     status: "ok" | "error", 
- *     indexes?: string[],
- *     message?: string 
- *   },
- *   supabase: { 
- *     status: "ok" | "error",
- *     message?: string 
- *   },
- *   kv: { 
- *     status: "ok" | "error",
- *     message?: string 
- *   }
- * }
- * 
- * Status Meanings:
- * - "ok": Service is healthy and responsive
- * - "error": Service is unreachable or malfunctioning
- * - "unknown": Service status could not be determined
- * 
- * Use Cases:
- * - Monitoring and alerting systems
- * - Load balancer health checks
- * - Debugging service connectivity issues
- * - System status dashboards
  */
 
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/pinecone/client"
+import { createClient } from "../../../lib/pinecone/client"
 import { kv } from "@vercel/kv"
-import { createEdgeClient } from "@/lib/supabase-server"
+import { createEdgeClient } from "../../../lib/supabase-server"
 
 export const runtime = "edge"
 
