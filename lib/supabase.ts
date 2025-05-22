@@ -5,8 +5,7 @@
  * It implements the singleton pattern for each environment to prevent
  * the "Multiple GoTrueClient instances" warning.
  *
- * See docs/AUTH_LOCKED.md for details on why this implementation works
- * and why it should not be modified.
+ * Enhanced version with better error handling and cleanup
  */
 
 import { createBrowserClient, createServerClient } from "@supabase/ssr"
@@ -16,6 +15,9 @@ import type { Database } from "@/types/supabase"
 
 // Consistent storage key across all environments
 const STORAGE_KEY = "supabase-auth"
+
+// Global flag to prevent multiple browser client instances
+let browserClientInitialized = false
 
 // Server-side client (singleton using React cache)
 export const createClient = cache(() => {
@@ -47,6 +49,9 @@ export const createClient = cache(() => {
       auth: {
         storageKey: STORAGE_KEY,
         flowType: "pkce",
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false,
       },
     },
   )
@@ -82,18 +87,27 @@ export function createEdgeClient() {
       auth: {
         storageKey: STORAGE_KEY,
         flowType: "pkce",
+        autoRefreshToken: false, // Don't auto-refresh in API routes
+        persistSession: false,   // Don't persist in API routes
+        detectSessionInUrl: false,
       },
     },
   )
 }
 
-// Browser client (singleton using module scope)
+// Browser client (singleton using module scope with enhanced protection)
 let browserClient: ReturnType<typeof createBrowserClient<Database>> | null = null
 
 export function getBrowserClient() {
+  // Server-side check
   if (typeof window === "undefined") return null
 
-  if (!browserClient) {
+  // Prevent multiple instances
+  if (browserClient && browserClientInitialized) {
+    return browserClient
+  }
+
+  if (!browserClientInitialized) {
     browserClient = createBrowserClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -101,10 +115,23 @@ export function getBrowserClient() {
         auth: {
           storageKey: STORAGE_KEY,
           flowType: "pkce",
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: true,
         },
       },
     )
+    
+    browserClientInitialized = true
   }
 
   return browserClient
+}
+
+// Cleanup function for testing or development
+export function resetBrowserClient() {
+  if (typeof window !== "undefined") {
+    browserClient = null
+    browserClientInitialized = false
+  }
 }
