@@ -11,7 +11,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { MessageSquare, FileText, Settings } from "lucide-react"
+import { MessageSquare, FileText, Settings, Bug } from "lucide-react"
 
 const navItems = [
   {
@@ -28,6 +28,11 @@ const navItems = [
     name: "Settings",
     href: "/dashboard/settings",
     icon: Settings,
+  },
+  {
+    name: "Debug",
+    href: "/dashboard/debug",
+    icon: Bug,
   },
 ]
 
