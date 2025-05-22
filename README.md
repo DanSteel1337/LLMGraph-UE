@@ -1,30 +1,53 @@
-# LLMGraph-UE
+# LLMGraph-UE: Serverless RAG Dashboard
 
-*Automatically synced with your [v0.dev](https://v0.dev) deployments*
+A serverless RAG (Retrieval-Augmented Generation) dashboard for API documentation, built with Next.js, Supabase, Pinecone, and the Vercel AI SDK.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/dansteel1337-gmailcoms-projects/v0-llmg-raph-ue)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.dev-black?style=for-the-badge)](https://v0.dev/chat/projects/OnhugEV1abo)
+## Features
 
-## Overview
+- **Serverless Architecture**: Built on Next.js App Router and Edge Runtime
+- **Vector Search**: Semantic search with Pinecone Serverless
+- **Document Processing**: Automatic chunking and embedding of documentation
+- **Chat Interface**: AI-powered chat with context from your documentation
+- **Authentication**: Secure, singleton-based Supabase authentication
 
-This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
+## Authentication System
 
-## Deployment
+The authentication system has been finalized and locked. See [AUTH_LOCKED.md](docs/AUTH_LOCKED.md) for details on the implementation and why it should not be modified.
 
-Your project is live at:
+## Getting Started
 
-**[https://vercel.com/dansteel1337-gmailcoms-projects/v0-llmg-raph-ue](https://vercel.com/dansteel1337-gmailcoms-projects/v0-llmg-raph-ue)**
+1. Clone the repository
+2. Set up the required environment variables
+3. Run `npm install`
+4. Run `npm run dev`
 
-## Build your app
+## Environment Variables
 
-Continue building your app on:
+The following environment variables are required:
 
-**[https://v0.dev/chat/projects/OnhugEV1abo](https://v0.dev/chat/projects/OnhugEV1abo)**
+- `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase anonymous key
+- `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase service role key
+- `OPENAI_API_KEY`: Your OpenAI API key
+- `PINECONE_API_KEY`: Your Pinecone API key
+- `PINECONE_INDEX_NAME`: Your Pinecone index name
+- `BLOB_READ_WRITE_TOKEN`: Your Vercel Blob read/write token
+- `KV_REST_API_URL`: Your Vercel KV REST API URL
+- `KV_REST_API_TOKEN`: Your Vercel KV REST API token
 
-## How It Works
+## Project Structure
 
-1. Create and modify your project using [v0.dev](https://v0.dev)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+- `app/`: Next.js App Router pages and components
+- `lib/`: Utility functions and services
+  - `ai/`: AI-related utilities (embeddings, prompts)
+  - `auth/`: Authentication utilities
+  - `documents/`: Document processing utilities
+  - `pinecone/`: Pinecone client and search utilities
+  - `storage/`: Vercel Blob and KV utilities
+  - `utils/`: General utilities
+- `middleware.ts`: Authentication middleware
+- `docs/`: Project documentation
+
+## License
+
+MIT

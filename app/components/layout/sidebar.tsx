@@ -1,0 +1,62 @@
+/**
+ * Purpose: Sidebar navigation component
+ * Logic:
+ * - Provides navigation links for the dashboard
+ * - Highlights active routes
+ * Runtime context: Client Component
+ */
+"use client"
+
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { MessageSquare, FileText, Settings } from "lucide-react"
+
+const navItems = [
+  {
+    name: "Chat",
+    href: "/dashboard",
+    icon: MessageSquare,
+  },
+  {
+    name: "Documents",
+    href: "/dashboard/documents",
+    icon: FileText,
+  },
+  {
+    name: "Settings",
+    href: "/dashboard/settings",
+    icon: Settings,
+  },
+]
+
+export function Sidebar() {
+  const pathname = usePathname()
+
+  return (
+    <aside className="hidden w-64 shrink-0 border-r bg-muted/40 md:block">
+      <div className="flex h-full flex-col gap-2 p-4">
+        <nav className="grid gap-1 px-2 pt-2">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href
+
+            return (
+              <Button
+                key={item.href}
+                variant={isActive ? "secondary" : "ghost"}
+                className={cn("justify-start", isActive ? "bg-secondary" : "hover:bg-muted")}
+                asChild
+              >
+                <Link href={item.href}>
+                  <item.icon className="mr-2 h-4 w-4" />
+                  {item.name}
+                </Link>
+              </Button>
+            )
+          })}
+        </nav>
+      </div>
+    </aside>
+  )
+}
