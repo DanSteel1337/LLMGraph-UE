@@ -23,6 +23,9 @@ import { retry } from "../../../lib/utils/retry"
 
 export const runtime = "edge"
 
+// Constants for embedding dimensions
+const EMBEDDING_DIMENSIONS = 3072 // text-embedding-3-large
+
 // Add this function at the top of the file, after the imports
 function sanitizeHost(host: string): string {
   // Remove any protocol prefix (http:// or https://)
@@ -87,6 +90,7 @@ async function testPinecone() {
       apiKey: process.env.PINECONE_API_KEY ? "Set (redacted)" : "Not set",
       indexName: process.env.PINECONE_INDEX_NAME,
       host: host, // Use sanitized host
+      expectedDimensions: EMBEDDING_DIMENSIONS,
     })
 
     // Create a new client instance specifically for debugging
@@ -111,16 +115,37 @@ async function testPinecone() {
       }
     }
 
-    // Test 2: Create a test vector
+    // Test 2: Generate a real embedding for testing
+    let testEmbedding
+    try {
+      testEmbedding = await createEmbedding("This is a test query for debugging the Pinecone vector database.")
+    } catch (error) {
+      return {
+        status: "error",
+        message: `Failed to generate test embedding: ${error instanceof Error ? error.message : "Unknown error"}`,
+        stats: statsResult,
+      }
+    }
+
+    // Verify embedding dimensions
+    if (testEmbedding.length !== EMBEDDING_DIMENSIONS) {
+      return {
+        status: "error",
+        message: `Embedding dimension mismatch: expected ${EMBEDDING_DIMENSIONS}, got ${testEmbedding.length}`,
+        stats: statsResult,
+      }
+    }
+
+    // Test 3: Create a test vector with real embedding
     const testVector = {
       id: `debug-test-${Date.now()}`,
-      values: Array(1536)
-        .fill(0)
-        .map(() => Math.random()),
+      values: testEmbedding, // Use real embedding instead of random values
       metadata: {
-        text: "This is a test vector for debugging",
+        text: "This is a test vector for debugging the Pinecone vector database.",
         source: "debug-api",
         timestamp: new Date().toISOString(),
+        embeddingModel: "text-embedding-3-large",
+        dimensions: EMBEDDING_DIMENSIONS,
       },
     }
 
@@ -135,10 +160,14 @@ async function testPinecone() {
         status: "error",
         message: `Failed to upsert test vector: ${error instanceof Error ? error.message : "Unknown error"}`,
         stats: statsResult,
+        embeddingInfo: {
+          dimensions: testEmbedding.length,
+          expectedDimensions: EMBEDDING_DIMENSIONS,
+        },
       }
     }
 
-    // Test 3: Query the test vector
+    // Test 4: Query the test vector
     let queryResult
     try {
       queryResult = await retry(
@@ -161,7 +190,7 @@ async function testPinecone() {
       }
     }
 
-    // Test 4: Delete the test vector
+    // Test 5: Delete the test vector
     let deleteResult
     try {
       deleteResult = await retry(async () => await pineconeClient.delete({ ids: [testVector.id] }), {
@@ -185,12 +214,15 @@ async function testPinecone() {
     return {
       status: "success",
       latency: endTime - startTime,
+      embeddingModel: "text-embedding-3-large",
+      embeddingDimensions: EMBEDDING_DIMENSIONS,
       stats: {
         totalVectors: statsResult.totalVectorCount,
         dimension: statsResult.dimension,
         namespaces: Object.keys(statsResult.namespaces || {}),
       },
       operations: {
+        embedding: { status: "success", dimensions: testEmbedding.length },
         upsert: { status: "success", result: upsertResult },
         query: { status: "success", result: queryResult },
         delete: { status: "success", result: deleteResult },
@@ -209,7 +241,7 @@ async function testOpenAI() {
   try {
     const startTime = Date.now()
 
-    // Test embedding generation
+    // Test embedding generation with text-embedding-3-large
     const embedding = await createEmbedding("This is a test query for debugging the OpenAI embedding API.")
 
     const endTime = Date.now()
@@ -217,8 +249,11 @@ async function testOpenAI() {
     return {
       status: "success",
       latency: endTime - startTime,
+      embeddingModel: "text-embedding-3-large",
       embeddingDimensions: embedding.length,
+      expectedDimensions: EMBEDDING_DIMENSIONS,
       embeddingSample: embedding.slice(0, 5),
+      dimensionMatch: embedding.length === EMBEDDING_DIMENSIONS,
     }
   } catch (error) {
     return {

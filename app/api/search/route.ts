@@ -4,7 +4,7 @@
  * Purpose: Provides direct access to semantic search functionality without chat context
  *
  * Features:
- * - Generates embeddings for search queries using OpenAI
+ * - Generates embeddings for search queries using OpenAI text-embedding-3-large
  * - Performs vector similarity search in Pinecone
  * - Supports metadata filtering for targeted searches
  * - Returns ranked search results with similarity scores
@@ -15,7 +15,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { validateEnv } from "../../../lib/utils/env"
 import { createClient } from "../../../lib/pinecone/client"
 import { searchVectors } from "../../../lib/pinecone/search"
-import { createEmbedding } from "../../../lib/ai/embeddings"
+import { createEmbedding, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL } from "../../../lib/ai/embeddings"
 import { createEdgeClient } from "../../../lib/supabase-server"
 
 export const runtime = "edge"
@@ -40,8 +40,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 })
     }
 
-    // Generate embedding for the query
+    // Generate embedding for the query using text-embedding-3-large
     const embedding = await createEmbedding(query)
+
+    // Validate embedding dimensions
+    if (embedding.length !== EMBEDDING_DIMENSIONS) {
+      throw new Error(
+        `Embedding dimension mismatch: expected ${EMBEDDING_DIMENSIONS}, got ${embedding.length}. Model: ${EMBEDDING_MODEL}`,
+      )
+    }
 
     // Search for relevant vectors
     const pineconeClient = createClient()
@@ -52,7 +59,15 @@ export async function POST(request: NextRequest) {
       hybridSearch: options.hybridSearch,
     })
 
-    return NextResponse.json(searchResults)
+    return NextResponse.json({
+      results: searchResults,
+      metadata: {
+        embeddingModel: EMBEDDING_MODEL,
+        embeddingDimensions: EMBEDDING_DIMENSIONS,
+        query: query,
+        topK: options.topK || 5,
+      },
+    })
   } catch (error) {
     console.error("Search error:", error)
     return NextResponse.json({ error: "Failed to process search request" }, { status: 500 })

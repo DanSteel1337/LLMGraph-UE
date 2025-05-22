@@ -4,7 +4,7 @@
  * Purpose: Main chat endpoint for RAG (Retrieval-Augmented Generation) functionality
  *
  * Features:
- * - Processes user messages and generates embeddings
+ * - Processes user messages and generates embeddings using text-embedding-3-large
  * - Searches for relevant context in Pinecone vector database
  * - Builds prompts with retrieved context
  * - Streams AI responses using OpenAI GPT-4
@@ -19,7 +19,7 @@ import { OpenAIStream } from "ai"
 import { validateEnv } from "../../../lib/utils/env"
 import { searchVectors } from "../../../lib/pinecone/search"
 import { buildPrompt } from "../../../lib/ai/prompts"
-import { createEmbedding } from "../../../lib/ai/embeddings"
+import { createEmbedding, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL } from "../../../lib/ai/embeddings"
 import { createClient } from "../../../lib/pinecone/client"
 import { createEdgeClient } from "../../../lib/supabase-server"
 
@@ -45,8 +45,15 @@ export async function POST(request: NextRequest) {
     const { messages, options = {} } = await request.json()
     const lastMessage = messages[messages.length - 1]
 
-    // Generate embedding for the query
+    // Generate embedding for the query using text-embedding-3-large
     const embedding = await createEmbedding(lastMessage.content)
+
+    // Validate embedding dimensions
+    if (embedding.length !== EMBEDDING_DIMENSIONS) {
+      throw new Error(
+        `Embedding dimension mismatch: expected ${EMBEDDING_DIMENSIONS}, got ${embedding.length}. Model: ${EMBEDDING_MODEL}`,
+      )
+    }
 
     // Search for relevant context
     const pineconeClient = createClient()
