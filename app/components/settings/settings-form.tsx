@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
-import { useToast } from "@/app/components/ui/use-toast"
+import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
 
 interface SettingsFormProps {

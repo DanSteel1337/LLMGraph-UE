@@ -8,7 +8,7 @@ import type React from "react"
  * Runtime context: Server Component
  */
 import { ThemeProvider } from "next-themes"
-import { Toaster } from "@/app/components/ui/toaster"
+import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from "@/app/components/auth/auth-provider"
 import "@/app/globals.css"
 import type { Metadata } from "next"
@@ -16,7 +16,7 @@ import type { Metadata } from "next"
 export const metadata: Metadata = {
   title: "LLMGraph-UE: Serverless RAG Dashboard",
   description: "A serverless RAG dashboard for API documentation",
-    generator: 'v0.dev'
+  generator: "v0.dev",
 }
 
 export default function RootLayout({

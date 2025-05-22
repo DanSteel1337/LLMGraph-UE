@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useToast } from "@/app/components/ui/use-toast"
+import { useToast } from "@/components/ui/use-toast"
 import { User, LogOut, Settings } from "lucide-react"
 import { useAuth } from "@/app/components/auth/auth-provider"
 

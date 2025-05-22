@@ -4,7 +4,7 @@ import React from "react"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { AlertCircle } from "lucide-react"
-import { useToast } from "@/app/components/ui/use-toast"
+import { useToast } from "@/components/ui/use-toast"
 
 interface ErrorBoundaryProps {
   children: React.ReactNode

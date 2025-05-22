@@ -13,7 +13,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Trash2, FileText, AlertCircle } from "lucide-react"
-import { useToast } from "@/app/components/ui/use-toast"
+import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
 import { formatBytes, formatDate } from "@/lib/utils"
 
