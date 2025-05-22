@@ -12,6 +12,8 @@ const nextConfig = {
     serverActions: {
       enabled: true,
     },
+    // Add Pinecone to external packages to prevent bundling issues
+    serverExternalPackages: ["@pinecone-database/pinecone"],
   },
   eslint: {
     ignoreDuringBuilds: true,
@@ -63,6 +65,12 @@ const nextConfig = {
         assert: false,
         events: false,
       }
+    }
+
+    // Add a specific alias for Pinecone to ensure the correct version is used
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "@pinecone-database/pinecone": require.resolve("@pinecone-database/pinecone"),
     }
 
     return config
