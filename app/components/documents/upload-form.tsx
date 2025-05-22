@@ -69,25 +69,47 @@ function UploadFormContent() {
         }
       })
 
-      xhr.addEventListener("load", () => {
+      xhr.addEventListener("load", async () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          const response = JSON.parse(xhr.responseText)
-          toast({
-            title: "Upload successful",
-            description: `${file.name} has been uploaded and is being processed.`,
-          })
-          setFile(null)
-          if (fileInputRef.current) {
-            fileInputRef.current.value = ""
+          try {
+            // Try to parse as JSON
+            const response = JSON.parse(xhr.responseText)
+            toast({
+              title: "Upload successful",
+              description: `${file.name} has been uploaded and is being processed.`,
+            })
+            setFile(null)
+            if (fileInputRef.current) {
+              fileInputRef.current.value = ""
+            }
+            router.refresh()
+          } catch (jsonError) {
+            // If JSON parsing fails, the response might be HTML
+            console.error("Response is not valid JSON:", xhr.responseText)
+            setError("Upload succeeded but received unexpected response format")
           }
-          router.refresh()
         } else {
+          // Handle HTTP error responses
           let errorMessage = "Upload failed"
           try {
-            const response = JSON.parse(xhr.responseText)
-            errorMessage = response.error || errorMessage
-          } catch (e) {
-            // Parsing error, use default message
+            // Try to parse error response as JSON
+            const errorResponse = JSON.parse(xhr.responseText)
+            errorMessage = errorResponse.error || errorMessage
+          } catch (parseError) {
+            // If JSON parsing fails, check if it's HTML
+            if (xhr.responseText.includes("<!DOCTYPE")) {
+              // This is likely an HTML error page
+              if (xhr.status === 401) {
+                errorMessage = "Authentication required. Please log in again."
+              } else if (xhr.status >= 500) {
+                errorMessage = "Server error occurred during upload"
+              } else {
+                errorMessage = `Upload failed with status ${xhr.status}`
+              }
+            } else {
+              // Use the raw response text if it's not HTML
+              errorMessage = xhr.responseText || errorMessage
+            }
           }
           setError(errorMessage)
         }
