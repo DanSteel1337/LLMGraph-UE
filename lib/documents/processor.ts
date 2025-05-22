@@ -10,6 +10,7 @@ import { chunkDocument } from "./chunker"
 import { createEmbeddingBatch } from "../ai/embeddings"
 import { kv } from "@vercel/kv"
 import { createClient } from "../pinecone/client"
+import type { PineconeVector } from "../pinecone/types"
 
 export async function processDocument(
   documentId: string,
@@ -22,11 +23,7 @@ export async function processDocument(
     text: string
     metadata: Record<string, any>
   }>
-  vectors: Array<{
-    id: string
-    values: number[]
-    metadata: Record<string, any>
-  }>
+  vectors: PineconeVector[]
 }> {
   // Get settings from KV or use defaults
   const settings = (await kv.get("settings")) || {
@@ -53,7 +50,7 @@ export async function processDocument(
   const embeddings = await createEmbeddingBatch(texts)
 
   // Create vectors
-  const vectors = chunks.map((chunk, i) => ({
+  const vectors: PineconeVector[] = chunks.map((chunk, i) => ({
     id: chunk.id,
     values: embeddings[i],
     metadata: {

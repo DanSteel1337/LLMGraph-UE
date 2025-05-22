@@ -8,6 +8,7 @@
  * Services: Pinecone
  */
 import type { PineconeRestClient } from "./rest-client"
+import type { Message } from "ai"
 
 export interface SearchResult {
   id: string
@@ -72,3 +73,6 @@ function deduplicateResults(results: SearchResult[]): SearchResult[] {
 
   return deduplicated
 }
+
+// Re-export Message type from AI SDK for convenience
+export type { Message }

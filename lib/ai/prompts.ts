@@ -5,8 +5,9 @@
  * - Formats context and questions
  * Runtime context: Edge Function
  */
-import type { SearchResult, Message } from "@/lib/pinecone/search"
-import { buildContextFromSearchResults, formatMessagesForOpenAI } from "@/lib/ai/chat"
+import type { SearchResult } from "../pinecone/search"
+import type { Message } from "ai"
+import { buildContextFromSearchResults, formatMessagesForOpenAI } from "./chat"
 
 export function buildPrompt(
   messages: Message[],
