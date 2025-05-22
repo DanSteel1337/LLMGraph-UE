@@ -51,11 +51,19 @@ export const createClient = cache(() => {
   )
 })
 
+// Edge runtime client cache
+let edgeClientCache: ReturnType<typeof createServerClient<Database>> | null = null
+
 // Edge runtime client (for API routes)
 export function createEdgeClient() {
+  // Use cached client if available (within the same request context)
+  if (edgeClientCache) {
+    return edgeClientCache
+  }
+
   const cookieStore = cookies()
 
-  return createServerClient<Database>(
+  edgeClientCache = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -87,4 +95,6 @@ export function createEdgeClient() {
       },
     },
   )
+
+  return edgeClientCache
 }

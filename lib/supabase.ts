@@ -13,38 +13,38 @@ import type { Database } from "@/types/supabase"
 // Consistent storage key across all environments
 const STORAGE_KEY = "supabase-auth"
 
-// Global flag to prevent multiple browser client instances
-let browserClientInitialized = false
-
-// Browser client (singleton using module scope with enhanced protection)
+// Global singleton instance
 let browserClient: ReturnType<typeof createBrowserClient<Database>> | null = null
 
+/**
+ * Gets the browser Supabase client (singleton)
+ * This implementation ensures only one client is created per browser context
+ */
 export function getBrowserClient() {
-  // Server-side check
-  if (typeof window === "undefined") return null
+  // Server-side check - always return null on server
+  if (typeof window === "undefined") {
+    return null
+  }
 
-  // Prevent multiple instances
-  if (browserClient && browserClientInitialized) {
+  // Return existing instance if available
+  if (browserClient !== null) {
     return browserClient
   }
 
-  if (!browserClientInitialized) {
-    browserClient = createBrowserClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          storageKey: STORAGE_KEY,
-          flowType: "pkce",
-          autoRefreshToken: true,
-          persistSession: true,
-          detectSessionInUrl: true,
-        },
+  // Create new instance if none exists
+  browserClient = createBrowserClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: {
+        storageKey: STORAGE_KEY,
+        flowType: "pkce",
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
       },
-    )
-    
-    browserClientInitialized = true
-  }
+    },
+  )
 
   return browserClient
 }
@@ -53,6 +53,5 @@ export function getBrowserClient() {
 export function resetBrowserClient() {
   if (typeof window !== "undefined") {
     browserClient = null
-    browserClientInitialized = false
   }
 }

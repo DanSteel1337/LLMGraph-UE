@@ -5,7 +5,7 @@
  * that works in Edge Runtime without Node.js dependencies.
  */
 
-import { retryPineconeOperation } from "./retry"
+import { retryPineconeOperation } from "../utils/retry"
 import type {
   PineconeConfig,
   PineconeVector,

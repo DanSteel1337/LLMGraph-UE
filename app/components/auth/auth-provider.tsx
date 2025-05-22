@@ -33,39 +33,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isInitialized, setIsInitialized] = useState(false)
   const router = useRouter()
   const initRef = useRef(false)
-
-  // Get the Supabase client once and memoize it
-  const supabase = getBrowserClient()
+  const supabaseRef = useRef(typeof window !== "undefined" ? getBrowserClient() : null)
 
   // Sign in function
-  const signIn = useCallback(
-    async (email: string, password: string) => {
-      if (!supabase) return { error: new Error("Supabase client not initialized") }
+  const signIn = useCallback(async (email: string, password: string) => {
+    const supabase = supabaseRef.current
+    if (!supabase) return { error: new Error("Supabase client not initialized") }
 
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-        if (error) {
-          return { error: new Error(error.message) }
-        }
-
-        if (data.user) {
-          setUser(data.user)
-        }
-
-        return { error: null }
-      } catch (err) {
-        return { error: err instanceof Error ? err : new Error("Unknown error") }
+      if (error) {
+        return { error: new Error(error.message) }
       }
-    },
-    [supabase],
-  )
+
+      if (data.user) {
+        setUser(data.user)
+      }
+
+      return { error: null }
+    } catch (err) {
+      return { error: err instanceof Error ? err : new Error("Unknown error") }
+    }
+  }, [])
 
   // Sign out function
   const signOut = useCallback(async () => {
+    const supabase = supabaseRef.current
     if (!supabase) return
 
     try {
@@ -75,10 +72,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("Sign out error:", error)
     }
-  }, [supabase, router])
+  }, [router])
 
   // Initialize auth state and listeners
   useEffect(() => {
+    const supabase = supabaseRef.current
     if (!supabase || initRef.current) return
 
     initRef.current = true
@@ -118,7 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe()
       initRef.current = false
     }
-  }, [supabase, router])
+  }, [router])
 
   const value = {
     user,

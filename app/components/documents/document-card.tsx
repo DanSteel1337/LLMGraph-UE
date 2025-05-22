@@ -11,7 +11,7 @@
 import { useState } from "react"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { CustomBadge } from "@/app/components/ui/custom-badge"
 import { Trash2, FileText, AlertCircle } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
@@ -70,13 +70,13 @@ export function DocumentCard({ document }: DocumentCardProps) {
   const getStatusBadge = () => {
     switch (document.status) {
       case "uploaded":
-        return <Badge variant="outline">Uploaded</Badge>
+        return <CustomBadge variant="outline">Uploaded</CustomBadge>
       case "processing":
-        return <Badge variant="secondary">Processing</Badge>
+        return <CustomBadge variant="secondary">Processing</CustomBadge>
       case "processed":
-        return <Badge variant="success">Processed</Badge>
+        return <CustomBadge variant="success">Processed</CustomBadge>
       case "error":
-        return <Badge variant="destructive">Error</Badge>
+        return <CustomBadge variant="destructive">Error</CustomBadge>
       default:
         return null
     }

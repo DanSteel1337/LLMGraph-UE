@@ -9,27 +9,31 @@ The authentication system uses Supabase Auth with a carefully implemented single
 ### Key Components
 
 1. **`lib/supabase.ts`**: Single source of truth for all Supabase clients
-   - `createClient()`: Server-side singleton (using React cache)
-   - `createEdgeClient()`: Edge runtime client
    - `getBrowserClient()`: Browser-side singleton (using module scope)
+   - Uses a true singleton pattern to prevent multiple instances
 
-2. **`app/components/auth/auth-provider.tsx`**: React context provider
+2. **`lib/supabase-server.ts`**: Server-side clients
+   - `createClient()`: Server-side singleton (using React cache)
+   - `createEdgeClient()`: Edge runtime client with request-scoped caching
+
+3. **`app/components/auth/auth-provider.tsx`**: React context provider
    - Manages auth state across the application
+   - Uses useRef to store the Supabase client instance
    - Provides user data and auth methods to components
 
-3. **`middleware.ts`**: Protects API routes
+4. **`middleware.ts`**: Protects API routes
    - Uses consistent storage key and configuration
+   - Implements request-scoped caching to prevent multiple instances
    - Validates authentication using `getUser()`
-
-4. **API Routes**: All use `createEdgeClient()` and `getUser()`
 
 ### Why It Works
 
-1. **Consistent Storage Key**: All clients use the same `STORAGE_KEY = "supabase-auth"`
-2. **Proper Singletons**: Each environment has a dedicated singleton implementation
+1. **True Singleton Pattern**: Each environment has a dedicated singleton implementation
+2. **Consistent Storage Key**: All clients use the same `STORAGE_KEY = "supabase-auth"`
 3. **PKCE Flow**: All clients use the same authentication flow type
 4. **Secure Validation**: Server-side code uses `getUser()` instead of `getSession()`
-5. **Clean Implementation**: No duplicate or unused auth code
+5. **Request-Scoped Caching**: Middleware and Edge functions use request-scoped caching
+6. **Clean Implementation**: No duplicate or unused auth code
 
 ## ⚠️ DO NOT MODIFY
 
@@ -72,7 +76,4 @@ import { useAuth } from "@/app/components/auth/auth-provider"
 const { user, loading, signIn, signOut } = useAuth()
 \`\`\`
 
-## Last Verified: May 22, 2025
-\`\`\`
-
-Now, let's add comments to the key auth files to indicate they are finalized:
+## Last Verified: May 23, 2025

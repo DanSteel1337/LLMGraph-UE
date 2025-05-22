@@ -1,41 +1,41 @@
 /**
  * Authentication Middleware
- * 
+ *
  * Purpose: Protects API routes and pages by validating user authentication
- * 
+ *
  * Features:
  * - Validates Supabase authentication for all protected routes
  * - Protects API endpoints (except auth and health endpoints)
  * - Handles authentication token refresh and validation
  * - Provides consistent auth checking across the application
  * - Optimized for Edge Runtime performance
- * 
+ *
  * Security: Uses server-side authentication validation
  * Runtime: Vercel Edge Runtime for minimal latency
- * 
+ *
  * Protected Routes:
  * - All /api/* routes except /api/auth/* and /api/health
  * - All /dashboard/* pages
  * - Any route requiring authentication
- * 
+ *
  * Public Routes:
  * - /auth/* (login, signup, callback)
  * - /api/health (health checks)
  * - / (landing page)
  * - Static files and assets
- * 
+ *
  * Response Behavior:
  * - API routes: Returns 401 JSON error for unauthorized access
  * - Pages: Redirects to login page
  * - Static files: Passes through without auth check
- * 
+ *
  * Authentication Flow:
  * 1. Check if route requires protection
  * 2. Validate user session using getUser()
  * 3. Allow access if authenticated
  * 4. Return 401/redirect if not authenticated
  * 5. Handle errors gracefully
- * 
+ *
  * FINALIZED AUTHENTICATION SYSTEM - DO NOT MODIFY
  * Enhanced version with better error handling and performance
  * See docs/AUTH_LOCKED.md for implementation details
@@ -54,10 +54,13 @@ const ENV_CACHE = {
   key: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
 }
 
+// Cache for Supabase client per request
+const clientCache = new Map<string, any>()
+
 export async function middleware(request: NextRequest) {
   // Quick path check to avoid unnecessary processing
   const { pathname } = request.nextUrl
-  
+
   // Skip middleware for static files and non-API routes
   if (
     pathname.startsWith("/_next") ||
@@ -81,11 +84,15 @@ export async function middleware(request: NextRequest) {
       return res
     }
 
-    // Create a Supabase client
-    const supabase = createServerClient(
-      ENV_CACHE.url,
-      ENV_CACHE.key,
-      {
+    // Generate a unique key for this request to use for caching
+    const requestId = request.headers.get("x-request-id") || request.url
+
+    // Use cached client if available
+    let supabase = clientCache.get(requestId)
+
+    if (!supabase) {
+      // Create a Supabase client
+      supabase = createServerClient(ENV_CACHE.url, ENV_CACHE.key, {
         cookies: {
           get(name) {
             return request.cookies.get(name)?.value
@@ -122,30 +129,37 @@ export async function middleware(request: NextRequest) {
           persistSession: false,
           detectSessionInUrl: false,
         },
-      },
-    )
+      })
+
+      // Cache the client for this request
+      clientCache.set(requestId, supabase)
+
+      // Clean up cache after request is complete (prevent memory leaks)
+      setTimeout(() => {
+        clientCache.delete(requestId)
+      }, 5000) // 5 seconds should be enough for most requests
+    }
 
     // Check if user is authenticated using getUser()
     const { data, error } = await supabase.auth.getUser()
 
     // API routes that require authentication (exclude auth endpoints)
-    const isProtectedApiRoute = pathname.startsWith("/api/") && 
-                               !pathname.startsWith("/api/auth") &&
-                               !pathname.startsWith("/api/health")
+    const isProtectedApiRoute =
+      pathname.startsWith("/api/") && !pathname.startsWith("/api/auth") && !pathname.startsWith("/api/health")
 
     // If accessing protected API route without authentication, return 401
     if (isProtectedApiRoute && (error || !data.user)) {
       return NextResponse.json(
-        { 
+        {
           error: "Unauthorized",
-          message: "Authentication required" 
-        }, 
-        { 
+          message: "Authentication required",
+        },
+        {
           status: 401,
           headers: {
             "Content-Type": "application/json",
-          }
-        }
+          },
+        },
       )
     }
 
@@ -156,16 +170,16 @@ export async function middleware(request: NextRequest) {
     // If there's an error in an API route, return 500
     if (pathname.startsWith("/api/")) {
       return NextResponse.json(
-        { 
+        {
           error: "Internal Server Error",
-          message: "Authentication service unavailable"
-        }, 
-        { 
+          message: "Authentication service unavailable",
+        },
+        {
           status: 500,
           headers: {
             "Content-Type": "application/json",
-          }
-        }
+          },
+        },
       )
     }
 
