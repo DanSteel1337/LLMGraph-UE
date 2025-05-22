@@ -2,14 +2,13 @@
  * FINALIZED AUTHENTICATION SYSTEM - DO NOT MODIFY
  *
  * This file contains server-side Supabase clients.
- *
- * Enhanced version with better error handling and cleanup
+ * It provides the createEdgeClient function needed for Edge Runtime authentication.
  */
 
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { cache } from "react"
-import type { Database } from "@/types/supabase"
+import type { Database } from "../types/supabase"
 
 // Consistent storage key across all environments
 const STORAGE_KEY = "supabase-auth"
