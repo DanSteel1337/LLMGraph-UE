@@ -1,10 +1,45 @@
+/**
+ * Document Processing API Route
+ * 
+ * Purpose: Processes uploaded documents into vector embeddings and stores them in Pinecone
+ * 
+ * Features:
+ * - Fetches document content from Vercel Blob storage
+ * - Chunks documents using semantic text splitting
+ * - Generates embeddings using OpenAI text-embedding-3-large
+ * - Stores vectors in Pinecone with metadata
+ * - Updates processing status in Vercel KV
+ * 
+ * Security: Requires valid Supabase authentication
+ * Runtime: Vercel Edge Runtime with streaming support for long operations
+ * 
+ * Request Format:
+ * POST /api/documents/process?id=documentId
+ * 
+ * Response:
+ * {
+ *   id: string,           // Document ID
+ *   status: string,       // Processing status
+ *   chunkCount: number,   // Number of text chunks created
+ *   vectorCount: number   // Number of vectors stored
+ * }
+ * 
+ * Processing Flow:
+ * 1. Validate authentication and document existence
+ * 2. Fetch document content from blob storage
+ * 3. Chunk document into semantic segments
+ * 4. Generate embeddings for each chunk
+ * 5. Store vectors in Pinecone with metadata
+ * 6. Update status in KV storage
+ */
+
 import { type NextRequest, NextResponse } from "next/server"
 import { validateEnv } from "@/lib/utils/env"
 import { kv } from "@vercel/kv"
 import { createClient } from "@/lib/pinecone/client"
 import { processDocument } from "@/lib/documents/processor"
 import { getDocument } from "@/lib/documents/storage"
-import { createEdgeClient } from "@/lib/supabase"
+import { createEdgeClient } from "@/lib/supabase-server"
 
 export const runtime = "edge"
 

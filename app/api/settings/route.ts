@@ -1,7 +1,54 @@
+/**
+ * Settings Management API Route
+ * 
+ * Purpose: Handles application configuration and RAG parameter management
+ * 
+ * Features:
+ * - GET: Retrieves current application settings
+ * - POST: Updates application settings
+ * - Stores settings in Vercel KV with persistence
+ * - Provides default settings for new installations
+ * - Validates setting formats and ranges
+ * 
+ * Security: Requires valid Supabase authentication
+ * Runtime: Vercel Edge Runtime for optimal performance
+ * 
+ * GET Request Format:
+ * GET /api/settings
+ * 
+ * POST Request Format:
+ * POST /api/settings
+ * {
+ *   topK: number,              // Number of chunks to retrieve (1-10)
+ *   temperature: number,       // AI response randomness (0.0-1.0)
+ *   hybridSearch: boolean,     // Enable hybrid search
+ *   chunkSize: {
+ *     text: number,            // Text chunk size in tokens (100-1000)
+ *     code: number             // Code chunk size in tokens (500-2000)
+ *   }
+ * }
+ * 
+ * Response Formats:
+ * GET: Settings object with current configuration
+ * POST: { success: true } on successful update
+ * 
+ * Default Settings:
+ * - topK: 5 (retrieve 5 most relevant chunks)
+ * - temperature: 0.7 (balanced creativity/consistency)
+ * - hybridSearch: true (use both vector and keyword search)
+ * - chunkSize: { text: 300, code: 1000 } (optimal token counts)
+ * 
+ * Settings Impact:
+ * - topK: More chunks = better context but slower responses
+ * - temperature: Higher = more creative, Lower = more consistent
+ * - hybridSearch: Combines semantic and exact matching
+ * - chunkSize: Larger chunks = more context per chunk but fewer total chunks
+ */
+
 import { type NextRequest, NextResponse } from "next/server"
 import { validateEnv } from "@/lib/utils/env"
 import { kv } from "@vercel/kv"
-import { createEdgeClient } from "@/lib/supabase"
+import { createEdgeClient } from "@/lib/supabase-server"
 
 export const runtime = "edge"
 

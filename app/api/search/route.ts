@@ -1,9 +1,57 @@
+/**
+ * Vector Search API Route
+ * 
+ * Purpose: Provides direct access to semantic search functionality without chat context
+ * 
+ * Features:
+ * - Generates embeddings for search queries using OpenAI
+ * - Performs vector similarity search in Pinecone
+ * - Supports metadata filtering for targeted searches
+ * - Returns ranked search results with similarity scores
+ * - Includes hybrid search capabilities (vector + keyword)
+ * 
+ * Security: Requires valid Supabase authentication
+ * Runtime: Vercel Edge Runtime for optimal performance
+ * 
+ * Request Format:
+ * POST /api/search
+ * {
+ *   query: string,           // Search query text
+ *   options?: {
+ *     topK?: number,         // Number of results to return (default: 5)
+ *     filter?: object,       // Pinecone metadata filter
+ *     hybridSearch?: boolean // Enable hybrid search (default: false)
+ *   }
+ * }
+ * 
+ * Response Format:
+ * SearchResult[] where SearchResult = {
+ *   id: string,              // Vector/chunk ID
+ *   score: number,           // Similarity score (0-1)
+ *   text: string,            // Chunk content
+ *   metadata?: {             // Document metadata
+ *     source: string,        // Original document name
+ *     section?: string,      // Document section
+ *     documentId: string,    // Document identifier
+ *     chunkIndex: number,    // Chunk position
+ *     timestamp: string,     // Creation time
+ *     heading?: string       // Section heading
+ *   }
+ * }
+ * 
+ * Use Cases:
+ * - Standalone document search interfaces
+ * - Research and exploration tools
+ * - Content discovery systems
+ * - Integration with external applications
+ */
+
 import { type NextRequest, NextResponse } from "next/server"
 import { validateEnv } from "@/lib/utils/env"
 import { createClient } from "@/lib/pinecone/client"
 import { searchVectors } from "@/lib/pinecone/search"
 import { createEmbedding } from "@/lib/ai/embeddings"
-import { createEdgeClient } from "@/lib/supabase"
+import { createEdgeClient } from "@/lib/supabase-server"
 
 export const runtime = "edge"
 

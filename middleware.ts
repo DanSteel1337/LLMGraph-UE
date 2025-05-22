@@ -1,11 +1,44 @@
 /**
+ * Authentication Middleware
+ * 
+ * Purpose: Protects API routes and pages by validating user authentication
+ * 
+ * Features:
+ * - Validates Supabase authentication for all protected routes
+ * - Protects API endpoints (except auth and health endpoints)
+ * - Handles authentication token refresh and validation
+ * - Provides consistent auth checking across the application
+ * - Optimized for Edge Runtime performance
+ * 
+ * Security: Uses server-side authentication validation
+ * Runtime: Vercel Edge Runtime for minimal latency
+ * 
+ * Protected Routes:
+ * - All /api/* routes except /api/auth/* and /api/health
+ * - All /dashboard/* pages
+ * - Any route requiring authentication
+ * 
+ * Public Routes:
+ * - /auth/* (login, signup, callback)
+ * - /api/health (health checks)
+ * - / (landing page)
+ * - Static files and assets
+ * 
+ * Response Behavior:
+ * - API routes: Returns 401 JSON error for unauthorized access
+ * - Pages: Redirects to login page
+ * - Static files: Passes through without auth check
+ * 
+ * Authentication Flow:
+ * 1. Check if route requires protection
+ * 2. Validate user session using getUser()
+ * 3. Allow access if authenticated
+ * 4. Return 401/redirect if not authenticated
+ * 5. Handle errors gracefully
+ * 
  * FINALIZED AUTHENTICATION SYSTEM - DO NOT MODIFY
- *
- * This middleware protects API routes by validating authentication.
- * Enhanced version with better error handling and performance.
- *
- * See docs/AUTH_LOCKED.md for details on why this implementation works
- * and why it should not be modified.
+ * Enhanced version with better error handling and performance
+ * See docs/AUTH_LOCKED.md for implementation details
  */
 
 import { NextResponse } from "next/server"

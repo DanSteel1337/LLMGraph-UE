@@ -1,7 +1,48 @@
+/**
+ * Document Management API Route
+ * 
+ * Purpose: Handles CRUD operations for document metadata and storage
+ * 
+ * Features:
+ * - GET: Retrieves document list or specific document by ID
+ * - DELETE: Removes document from storage and associated vectors from Pinecone
+ * - Manages document metadata in Vercel KV
+ * - Integrates with Vercel Blob for file storage
+ * 
+ * Security: Requires valid Supabase authentication
+ * Runtime: Vercel Edge Runtime for optimal performance
+ * 
+ * GET Request Formats:
+ * - GET /api/documents - Returns all documents
+ * - GET /api/documents?id=documentId - Returns specific document
+ * 
+ * DELETE Request Format:
+ * - DELETE /api/documents?id=documentId - Deletes document and vectors
+ * 
+ * Response Formats:
+ * GET (all): Document[]
+ * GET (single): Document | 404
+ * DELETE: { success: true } | Error
+ * 
+ * Document Structure:
+ * {
+ *   id: string,
+ *   name: string,
+ *   type: string,
+ *   size: number,
+ *   url: string,
+ *   uploadedAt: string,
+ *   status: "uploaded" | "processing" | "processed" | "error",
+ *   chunkCount?: number,
+ *   vectorCount?: number,
+ *   error?: string
+ * }
+ */
+
 import { type NextRequest, NextResponse } from "next/server"
 import { validateEnv } from "@/lib/utils/env"
 import { getDocuments, getDocument, deleteDocument } from "@/lib/documents/storage"
-import { createEdgeClient } from "@/lib/supabase"
+import { createEdgeClient } from "@/lib/supabase-server"
 
 export const runtime = "edge"
 

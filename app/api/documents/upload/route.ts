@@ -1,8 +1,51 @@
+/**
+ * Document Upload API Route
+ * 
+ * Purpose: Handles file uploads to Vercel Blob storage and initiates document processing
+ * 
+ * Features:
+ * - Validates file types (Markdown, Text, PDF, HTML)
+ * - Uploads files to Vercel Blob with private access
+ * - Stores document metadata in Vercel KV
+ * - Triggers asynchronous document processing
+ * - Generates unique document IDs with timestamps
+ * 
+ * Security: Requires valid Supabase authentication
+ * Runtime: Vercel Edge Runtime for optimal performance
+ * 
+ * Request Format:
+ * POST /api/documents/upload
+ * Content-Type: multipart/form-data
+ * Body: FormData with 'file' field containing the document
+ * 
+ * Response Format:
+ * {
+ *   id: string,           // Generated document ID
+ *   name: string,         // Original filename
+ *   url: string,          // Blob storage URL
+ *   status: "uploaded"    // Initial status
+ * }
+ * 
+ * Supported File Types:
+ * - text/markdown (.md)
+ * - text/plain (.txt)
+ * - application/pdf (.pdf)
+ * - text/html (.html)
+ * 
+ * Processing Flow:
+ * 1. Validate authentication and file type
+ * 2. Generate unique document ID
+ * 3. Upload to Vercel Blob storage
+ * 4. Store metadata in KV
+ * 5. Trigger background processing (non-blocking)
+ * 6. Return upload confirmation
+ */
+
 import { type NextRequest, NextResponse } from "next/server"
 import { put } from "@vercel/blob"
 import { validateEnv } from "@/lib/utils/env"
 import { kv } from "@vercel/kv"
-import { createEdgeClient } from "@/lib/supabase"
+import { createEdgeClient } from "@/lib/supabase-server"
 
 export const runtime = "edge"
 
