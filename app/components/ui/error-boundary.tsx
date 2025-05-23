@@ -1,9 +1,10 @@
 "use client"
 
 import React from "react"
-import { Alert, AlertTitle, AlertDescription } from "../../../components/ui/alert"
-import { Button } from "../../../components/ui/button"
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { AlertCircle } from "lucide-react"
+import { useToast } from "@/components/ui/use-toast"
 
 interface ErrorBoundaryProps {
   children: React.ReactNode
@@ -70,10 +71,14 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
 // Helper hook to use toast notifications with error boundaries
 export function useErrorBoundaryWithToast() {
+  const { toast } = useToast()
+
   const handleError = (error: Error) => {
-    // Use browser-native alert for simplicity
-    // This avoids dependencies on toast libraries that might use path aliases
-    alert(`Error: ${error.message || "An unexpected error occurred"}`)
+    toast({
+      title: "Error",
+      description: error.message || "An unexpected error occurred",
+      variant: "destructive",
+    })
   }
 
   return { handleError }

@@ -2,17 +2,17 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Button } from "../../../components/ui/button"
+import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "../../../components/ui/dropdown-menu"
-import { useToast } from "../../../components/ui/use-toast"
+} from "@/components/ui/dropdown-menu"
+import { useToast } from "@/components/ui/use-toast"
 import { User, LogOut, Settings } from "lucide-react"
-import { useAuth } from "../auth/auth-provider"
+import { useAuth } from "@/app/components/auth/auth-provider"
 
 export function Header() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)

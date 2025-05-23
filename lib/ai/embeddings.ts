@@ -7,13 +7,13 @@
  * Runtime context: Edge Function
  * Services: OpenAI
  */
-import { retry } from "../utils/retry"
+import { retry } from "@/lib/utils/retry"
 
 // Constants for the embedding model
 export const EMBEDDING_MODEL = "text-embedding-3-large"
 export const EMBEDDING_DIMENSIONS = 3072
 
-export const createEmbedding = async (text: string): Promise<number[]> => {
+export async function createEmbedding(text: string): Promise<number[]> {
   const response = await retry(
     async () => {
       const result = await fetch("https://api.openai.com/v1/embeddings", {
@@ -55,7 +55,7 @@ export const createEmbedding = async (text: string): Promise<number[]> => {
   return embedding
 }
 
-export const createEmbeddingBatch = async (texts: string[], batchSize = 20): Promise<number[][]> => {
+export async function createEmbeddingBatch(texts: string[], batchSize = 20): Promise<number[][]> {
   const embeddings: number[][] = []
 
   // Process in batches to avoid rate limits

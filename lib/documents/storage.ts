@@ -1,80 +1,73 @@
-/**
- * Purpose: Document storage utilities
- * Logic:
- * - Manages document storage and retrieval
- * - Handles document metadata
- * Runtime context: Edge Function
- * Services: Vercel Blob (for document storage), Vercel KV (for metadata)
- */
-import { del } from "@vercel/blob"
-import { kv } from "@vercel/kv"
-import { createClient } from "../pinecone/client"
+import { kv } from "./kv" // Updated import to use our kv module
 
-// Optimized document listing with pagination support
 export async function getDocuments(limit = 100, cursor?: string) {
   // Use scan pattern for efficient listing
   const pattern = "document:*"
-  const documents = []
+  const documents: any[] = []
 
-  // Get keys matching pattern
-  const keys = await kv.keys(pattern)
+  try {
+    // Get keys matching pattern
+    const keys = await kv.keys(pattern)
 
-  // Filter out status and metric keys
-  const documentKeys = keys.filter(
-    (key) => !key.includes(":status") && !key.includes(":chunks") && !key.includes(":vectors"),
-  )
+    // Filter out status and metric keys
+    const documentKeys = keys.filter(
+      (key: string) => !key.includes(":status") && !key.includes(":chunks") && !key.includes(":vectors"),
+    )
 
-  // Batch get for efficiency
-  if (documentKeys.length > 0) {
-    // Get documents in batches to avoid memory issues
-    const batchSize = 20
-    for (let i = 0; i < Math.min(documentKeys.length, limit); i += batchSize) {
-      const batch = documentKeys.slice(i, i + batchSize)
-      const batchPromises = batch.map((key) => kv.get(key))
-      const batchResults = await Promise.all(batchPromises)
+    // Batch get for efficiency
+    if (documentKeys.length > 0) {
+      // Get documents in batches to avoid memory issues
+      const batchSize = 20
+      for (let i = 0; i < Math.min(documentKeys.length, limit); i += batchSize) {
+        const batch = documentKeys.slice(i, i + batchSize)
+        const batchPromises = batch.map((key: string) => kv.get(key))
+        const batchResults = await Promise.all(batchPromises)
 
-      for (const doc of batchResults) {
-        if (doc) {
-          documents.push(doc)
+        for (const doc of batchResults) {
+          if (doc) {
+            documents.push(doc)
+          }
         }
       }
     }
+  } catch (error) {
+    console.error("Error fetching documents:", error)
+    // Return empty array on error rather than throwing
+    return []
   }
 
   return documents
 }
 
-export async function getDocument(id: string) {
-  return kv.get(`document:${id}`)
-}
+export async function getDocument(supabase: any, documentId: string) {
+  try {
+    const document = await kv.get(`document:${documentId}`)
 
-export async function deleteDocument(id: string) {
-  // Get document metadata
-  const document = await getDocument(id)
+    if (!document) {
+      return { data: null, error: null }
+    }
 
-  if (!document) {
-    throw new Error("Document not found")
+    // Get additional metadata
+    const [status, chunkCount, vectorCount] = await Promise.all([
+      kv.get(`document:${documentId}:status`),
+      kv.get(`document:${documentId}:chunks`),
+      kv.get(`document:${documentId}:vectors`),
+    ])
+
+    return {
+      data: {
+        ...document,
+        status: status || "unknown",
+        chunkCount,
+        vectorCount,
+      },
+      error: null,
+    }
+  } catch (error) {
+    console.error(`Error fetching document ${documentId}:`, error)
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : "Unknown error",
+    }
   }
-
-  // Delete from Blob
-  if (document.url) {
-    await del(document.url)
-  }
-
-  // Delete vectors from Pinecone
-  const pinecone = createClient()
-
-  // Delete all vectors with matching documentId
-  await pinecone.delete({
-    filter: {
-      documentId: { $eq: id },
-    },
-  })
-
-  // Delete metadata from KV - batch delete for efficiency
-  const keysToDelete = [`document:${id}`, `document:${id}:status`, `document:${id}:chunks`, `document:${id}:vectors`]
-
-  await Promise.all(keysToDelete.map((key) => kv.del(key)))
-
-  return { success: true }
 }

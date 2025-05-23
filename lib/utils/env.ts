@@ -14,7 +14,7 @@ export const ENV_GROUPS = {
   VERCEL_KV: ["KV_REST_API_URL", "KV_REST_API_TOKEN"],
 }
 
-export const validateEnv = (groups: string[] = Object.keys(ENV_GROUPS)): void => {
+export function validateEnv(groups: string[] = Object.keys(ENV_GROUPS)) {
   const requiredVars: string[] = []
 
   // Add variables from requested groups

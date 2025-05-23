@@ -2,9 +2,9 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Button } from "../components/ui/button"
+import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { useAuth } from "./components/auth/auth-provider"
+import { useAuth } from "@/app/components/auth/auth-provider"
 
 export default function LandingPage() {
   const { user, loading } = useAuth()

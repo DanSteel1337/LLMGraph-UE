@@ -16,8 +16,9 @@ import { ChatMessage } from "./chat-message"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, Bot } from "lucide-react"
-import { ErrorBoundary, useErrorBoundaryWithToast } from "../ui/error-boundary"
+import { AlertCircle } from "lucide-react"
+import { Bot } from "lucide-react"
+import { ErrorBoundary, useErrorBoundaryWithToast } from "@/app/components/ui/error-boundary"
 import { Button } from "@/components/ui/button"
 
 // Separate the chat content into its own component to be wrapped by ErrorBoundary

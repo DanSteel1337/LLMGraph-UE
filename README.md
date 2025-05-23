@@ -19,6 +19,6 @@ This project uses a custom Edge-compatible REST client for Pinecone instead of t
 
 Let's update the .gitignore file to exclude any Pinecone SDK files that might be present:
 
-```text file=".gitignore" type="partial"
+\`\`\`text file=".gitignore" type="partial"
 # Pinecone SDK (we use our own REST client)
 node_modules/@pinecone-database

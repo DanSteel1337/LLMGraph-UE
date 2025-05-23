@@ -16,14 +16,14 @@ function sanitizeHost(host: string): string {
   return host.replace(/^(https?:\/\/)/, "")
 }
 
-export const createClient = (): PineconeRestClient => {
+export function createClient(): PineconeRestClient {
   validateEnv(["PINECONE"])
 
   if (!pineconeClient) {
     const host = sanitizeHost(process.env.PINECONE_HOST!)
 
     // Only log in development
-    if (process.env.NODE_ENV === "development") {
+    if (process.env.NODE_ENV === 'development') {
       console.log("Creating Pinecone client with:", {
         indexName: process.env.PINECONE_INDEX_NAME,
         host: host,

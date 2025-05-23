@@ -1,7 +1,7 @@
 /**
  * Retry Utilities
  *
- * Purpose: Provides retry functionality for API calls
+ * Purpose: Provides retry functionality for async operations
  * Logic:
  * - Implements exponential backoff
  * - Handles transient errors
@@ -10,7 +10,7 @@
  * Runtime context: Edge Function
  */
 
-interface RetryOptions {
+export interface RetryOptions {
   retries?: number
   minTimeout?: number
   maxTimeout?: number
@@ -18,8 +18,11 @@ interface RetryOptions {
   onRetry?: (error: Error, attempt: number) => void
 }
 
+/**
+ * Generic retry function for any async operation
+ */
 export async function retry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
-  const { retries = 3, minTimeout = 1000, maxTimeout = 10000, factor = 2, onRetry = () => {} } = options
+  const { retries = 3, minTimeout = 1000, maxTimeout = 30000, factor = 2, onRetry } = options
 
   let attempt = 0
   let lastError: Error
@@ -29,41 +32,68 @@ export async function retry<T>(fn: () => Promise<T>, options: RetryOptions = {})
       return await fn()
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error))
+
+      if (onRetry) {
+        onRetry(lastError, attempt)
+      }
+
       attempt++
 
       if (attempt >= retries) {
         break
       }
 
-      onRetry(lastError, attempt)
+      const timeout = Math.min(minTimeout * Math.pow(factor, attempt), maxTimeout)
 
-      // Calculate backoff delay
-      const delay = Math.min(maxTimeout, minTimeout * Math.pow(factor, attempt - 1))
-
-      // Add jitter to avoid thundering herd
-      const jitter = Math.random() * 0.3 * delay
-      const backoff = delay + jitter
-
-      await new Promise((resolve) => setTimeout(resolve, backoff))
+      await new Promise((resolve) => setTimeout(resolve, timeout))
     }
   }
 
   throw lastError!
 }
 
-// Specialized retry for Pinecone operations
-export async function retryPineconeOperation<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
-  return retry(fn, {
-    retries: 5,
-    minTimeout: 500,
-    maxTimeout: 5000,
-    factor: 1.5,
-    ...options,
-    onRetry: (error, attempt) => {
-      console.warn(`Pinecone operation failed (attempt ${attempt}): ${error.message}`)
-      if (options.onRetry) {
-        options.onRetry(error, attempt)
+/**
+ * Specialized retry function for Pinecone API operations
+ * Includes Pinecone-specific error handling logic
+ */
+export async function retryPineconeOperation<T>(operation: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
+  const { retries = 3, minTimeout = 1000, maxTimeout = 10000, factor = 2, onRetry } = options
+
+  let lastError: Error
+  let attempt = 0
+
+  while (attempt <= retries) {
+    try {
+      return await operation()
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+
+      // Check if we should retry based on error type
+      // Rate limits and network errors are good candidates for retry
+      const shouldRetry =
+        lastError.message.includes("rate limit") ||
+        lastError.message.includes("timeout") ||
+        lastError.message.includes("network") ||
+        lastError.message.includes("5") // 5xx errors
+
+      if (!shouldRetry || attempt >= retries) {
+        throw lastError
       }
-    },
-  })
+
+      // Calculate backoff time
+      const timeout = Math.min(minTimeout * Math.pow(factor, attempt), maxTimeout)
+
+      // Call onRetry callback if provided
+      if (onRetry) {
+        onRetry(lastError, attempt)
+      }
+
+      // Wait before retrying
+      await new Promise((resolve) => setTimeout(resolve, timeout))
+
+      attempt++
+    }
+  }
+
+  throw lastError!
 }

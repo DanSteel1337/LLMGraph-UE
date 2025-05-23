@@ -1,15 +1,22 @@
-import { AuthForm } from "../../components/auth/auth-form"
+/**
+ * Purpose: Login page for the application
+ * Logic:
+ * - Renders the authentication form
+ * Runtime context: Server Component
+ */
+import { AuthForm } from "@/app/components/auth/auth-form"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold">RAG Dashboard</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Sign in to access your RAG dashboard</p>
-        </div>
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle>Sign In</CardTitle>
+        <CardDescription>Enter your email and password to access the dashboard</CardDescription>
+      </CardHeader>
+      <CardContent>
         <AuthForm />
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   )
 }

@@ -1,28 +1,35 @@
 /**
- * Utility functions for the application
+ * Purpose: Utility functions
+ * Logic:
+ * - Provides common utility functions
+ * Runtime context: Edge Function / Client Component
  */
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
 
-// Tailwind class name utility
-export function cn(...classes: (string | undefined | null | false)[]) {
-  return classes.filter(Boolean).join(" ")
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
 }
 
-// Format file size utility
-export function formatFileSize(bytes: number): string {
+export function formatBytes(bytes: number, decimals = 2) {
   if (bytes === 0) return "0 Bytes"
 
   const k = 1024
-  const sizes = ["Bytes", "KB", "MB", "GB"]
+  const dm = decimals < 0 ? 0 : decimals
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"]
+
   const i = Math.floor(Math.log(bytes) / Math.log(k))
 
-  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i]
 }
 
-// Format date utility
-export function formatDate(date: string | Date): string {
-  return new Date(date).toLocaleDateString("en-US", {
+export function formatDate(dateString: string) {
+  const date = new Date(dateString)
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
     month: "short",
     day: "numeric",
-    year: "numeric",
-  })
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date)
 }

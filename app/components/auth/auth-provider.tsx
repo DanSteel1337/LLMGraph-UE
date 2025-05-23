@@ -14,7 +14,7 @@ import type React from "react"
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { getBrowserClient } from "../../../lib/supabase"
+import { getBrowserClient } from "@/lib/supabase"
 import type { User } from "@supabase/supabase-js"
 
 type AuthContextType = {

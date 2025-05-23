@@ -7,8 +7,8 @@
  * - Maintains compatibility with the original Badge component
  * Runtime context: Client Component
  */
-import { Badge } from "../../../components/ui/badge"
-import { cn } from "../../../lib/utils"
+import { Badge, badgeVariants } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
 import type React from "react"
 
 // Define custom variants
@@ -31,8 +31,7 @@ export function CustomBadge({ className, variant = "default", ...props }: Custom
   return (
     <div
       className={cn(
-        // Use a basic badge style as fallback
-        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+        badgeVariants({ variant: "default" }),
         variant === "success" ? customBadgeVariants.success : customBadgeVariants.warning,
         className,
       )}
