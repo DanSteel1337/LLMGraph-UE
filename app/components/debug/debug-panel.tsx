@@ -1,27 +1,32 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "../../../components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs"
 import { Separator } from "../../../components/ui/separator"
 import { CustomBadge } from "../ui/custom-badge"
-import { AlertCircle, CheckCircle, RefreshCw } from "lucide-react"
+import { AlertCircle, CheckCircle, RefreshCw, XCircle } from "lucide-react"
+import { useToast } from "../../../components/ui/use-toast"
 
 interface DebugPanelProps {
   initialTab?: string
 }
 
 export function DebugPanel({ initialTab = "health" }: DebugPanelProps) {
-  const [healthStatus, setHealthStatus] = useState<Record<string, { status: "ok" | "error"; message?: string }>>({})
+  const [healthData, setHealthData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
 
   const checkHealth = async () => {
     setIsLoading(true)
+    setError(null)
+
     try {
-      const response = await fetch("/api/health", {
+      const response = await fetch("/api/debug", {
         method: "GET",
-        credentials: "include",
+        credentials: "include", // Important for auth cookies
       })
 
       if (!response.ok) {
@@ -29,50 +34,40 @@ export function DebugPanel({ initialTab = "health" }: DebugPanelProps) {
       }
 
       const data = await response.json()
-      setHealthStatus(data.services || {})
-    } catch (error) {
-      console.error("Health check error:", error)
-      setHealthStatus({
-        api: { status: "error", message: error instanceof Error ? error.message : "Unknown error" },
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
+      setHealthData(data)
 
-  const checkDocumentProcessing = async () => {
-    setIsLoading(true)
-    try {
-      const response = await fetch("/api/health/document-processing", {
-        method: "GET",
-        credentials: "include",
-      })
+      // Check for any errors in the results
+      const hasErrors = Object.values(data.tests).some((test: any) => test.status === "error")
 
-      if (!response.ok) {
-        throw new Error(`Document processing check failed with status: ${response.status}`)
+      if (hasErrors) {
+        toast({
+          title: "Diagnostics completed with errors",
+          description: "Some tests failed. Check the results for details.",
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Diagnostics completed successfully",
+          description: "All tests passed.",
+        })
       }
-
-      const data = await response.json()
-      setHealthStatus((prev) => ({
-        ...prev,
-        documentProcessing:
-          data.status === "ok"
-            ? { status: "ok" }
-            : { status: "error", message: data.message || "Document processing check failed" },
-      }))
-    } catch (error) {
-      console.error("Document processing check error:", error)
-      setHealthStatus((prev) => ({
-        ...prev,
-        documentProcessing: {
-          status: "error",
-          message: error instanceof Error ? error.message : "Unknown error",
-        },
-      }))
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred"
+      setError(errorMessage)
+      toast({
+        title: "Error running diagnostics",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
       setIsLoading(false)
     }
   }
+
+  // Auto-run diagnostics on mount
+  useEffect(() => {
+    checkHealth()
+  }, [])
 
   return (
     <Card className="w-full">
@@ -103,66 +98,58 @@ export function DebugPanel({ initialTab = "health" }: DebugPanelProps) {
 
               <Separator />
 
-              <div className="space-y-2">
-                {Object.keys(healthStatus).length > 0 ? (
-                  Object.entries(healthStatus).map(([service, status]) => (
-                    <div key={service} className="flex items-center justify-between rounded-lg border p-3">
-                      <div className="flex items-center gap-2">
-                        {status.status === "ok" ? (
-                          <CheckCircle className="h-5 w-5 text-green-500" />
-                        ) : (
-                          <AlertCircle className="h-5 w-5 text-red-500" />
-                        )}
-                        <span className="font-medium capitalize">{service}</span>
-                      </div>
-                      <CustomBadge variant={status.status === "ok" ? "success" : "destructive"}>
-                        {status.status === "ok" ? "Healthy" : "Error"}
-                      </CustomBadge>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-4 text-muted-foreground">Run health checks to see results</div>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <h3 className="text-lg font-medium">Document Processing</h3>
-                <Button variant="outline" size="sm" onClick={checkDocumentProcessing} disabled={isLoading}>
-                  {isLoading ? (
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                  )}
-                  Test Processing
-                </Button>
-              </div>
-
-              <Separator />
-
-              {healthStatus.documentProcessing ? (
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="flex items-center gap-2">
-                    {healthStatus.documentProcessing.status === "ok" ? (
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                    ) : (
-                      <AlertCircle className="h-5 w-5 text-red-500" />
-                    )}
-                    <span className="font-medium">Document Processing Pipeline</span>
+              {error && (
+                <div className="rounded-md bg-destructive/15 p-3 text-destructive">
+                  <div className="flex items-center">
+                    <AlertCircle className="h-4 w-4 mr-2" />
+                    <span>{error}</span>
                   </div>
-                  <CustomBadge variant={healthStatus.documentProcessing.status === "ok" ? "success" : "destructive"}>
-                    {healthStatus.documentProcessing.status === "ok" ? "Working" : "Failed"}
-                  </CustomBadge>
-                </div>
-              ) : (
-                <div className="text-center py-4 text-muted-foreground">
-                  Run document processing test to see results
                 </div>
               )}
 
-              {healthStatus.documentProcessing?.message && (
-                <div className="mt-2 text-sm text-muted-foreground">{healthStatus.documentProcessing.message}</div>
+              {healthData && healthData.tests ? (
+                <div className="space-y-4">
+                  {Object.entries(healthData.tests).map(([service, data]: [string, any]) => (
+                    <div key={service} className="rounded-lg border p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center">
+                          {data.status === "success" ? (
+                            <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-red-500 mr-2" />
+                          )}
+                          <span className="font-medium capitalize">{service}</span>
+                        </div>
+                        <CustomBadge variant={data.status === "success" ? "success" : "destructive"}>
+                          {data.status === "success" ? "Healthy" : "Error"}
+                        </CustomBadge>
+                      </div>
+
+                      <div className="text-sm text-muted-foreground">
+                        {data.status === "success" ? (
+                          <div>
+                            <div>Latency: {data.latency}ms</div>
+                            {service === "pinecone" && data.stats && (
+                              <div>
+                                <div>Total Vectors: {data.stats.totalVectors}</div>
+                                <div>Dimension: {data.stats.dimension}</div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-red-500">{data.message}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                !error &&
+                !isLoading && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No health data available. Click "Check Health" to run diagnostics.
+                  </div>
+                )
               )}
             </div>
           </TabsContent>
@@ -178,24 +165,55 @@ export function DebugPanel({ initialTab = "health" }: DebugPanelProps) {
 
               <Separator />
 
-              <div className="space-y-2">
-                {[
-                  "OPENAI_API_KEY",
-                  "PINECONE_API_KEY",
-                  "PINECONE_INDEX_NAME",
-                  "PINECONE_ENVIRONMENT",
-                  "PINECONE_PROJECT_ID",
-                  "SUPABASE_URL",
-                  "SUPABASE_ANON_KEY",
-                ].map((envVar) => (
-                  <div key={envVar} className="flex items-center justify-between rounded-lg border p-3">
-                    <span className="font-mono text-sm">{envVar}</span>
-                    <CustomBadge variant={process.env[envVar] ? "success" : "destructive"}>
-                      {process.env[envVar] ? "Set" : "Missing"}
+              {healthData ? (
+                <div className="space-y-2">
+                  {/* OpenAI */}
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <span className="font-mono text-sm">OPENAI_API_KEY</span>
+                    <CustomBadge variant={healthData.tests?.openai?.status === "success" ? "success" : "destructive"}>
+                      {healthData.tests?.openai?.status === "success" ? "Set" : "Missing"}
                     </CustomBadge>
                   </div>
-                ))}
-              </div>
+
+                  {/* Pinecone */}
+                  {["PINECONE_API_KEY", "PINECONE_INDEX_NAME", "PINECONE_HOST"].map((envVar) => (
+                    <div key={envVar} className="flex items-center justify-between rounded-lg border p-3">
+                      <span className="font-mono text-sm">{envVar}</span>
+                      <CustomBadge
+                        variant={healthData.tests?.pinecone?.status === "success" ? "success" : "destructive"}
+                      >
+                        {healthData.tests?.pinecone?.status === "success" ? "Set" : "Missing"}
+                      </CustomBadge>
+                    </div>
+                  ))}
+
+                  {/* KV */}
+                  {["KV_REST_API_URL", "KV_REST_API_TOKEN"].map((envVar) => (
+                    <div key={envVar} className="flex items-center justify-between rounded-lg border p-3">
+                      <span className="font-mono text-sm">{envVar}</span>
+                      <CustomBadge variant={healthData.tests?.kv?.status === "success" ? "success" : "destructive"}>
+                        {healthData.tests?.kv?.status === "success" ? "Set" : "Missing"}
+                      </CustomBadge>
+                    </div>
+                  ))}
+
+                  {/* Supabase */}
+                  {["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"].map((envVar) => (
+                    <div key={envVar} className="flex items-center justify-between rounded-lg border p-3">
+                      <span className="font-mono text-sm">{envVar}</span>
+                      <CustomBadge
+                        variant={healthData.tests?.supabase?.status === "success" ? "success" : "destructive"}
+                      >
+                        {healthData.tests?.supabase?.status === "success" ? "Set" : "Missing"}
+                      </CustomBadge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  Run health checks to see environment variable status
+                </div>
+              )}
             </div>
           </TabsContent>
         </Tabs>

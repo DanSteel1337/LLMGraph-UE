@@ -42,15 +42,23 @@ export async function GET(request: NextRequest) {
   try {
     // Check KV connectivity
     try {
-      await kv.set("health-check:document-processing", { timestamp: Date.now() })
-      const result = await kv.get("health-check:document-processing")
-      healthStatus.services.kv = { status: result ? "healthy" : "degraded" }
+      if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+        healthStatus.services.kv = {
+          status: "unhealthy",
+          error: "Missing required KV environment variables",
+        }
+        healthStatus.status = "degraded"
+      } else {
+        await kv.set("health-check:document-processing", { timestamp: Date.now() })
+        const result = await kv.get("health-check:document-processing")
+        healthStatus.services.kv = { status: result ? "healthy" : "degraded" }
 
-      // Get processing metrics from KV
-      const processingMetrics = ((await kv.get("document-processing:metrics")) as any) || {}
-      healthStatus.metrics = {
-        ...healthStatus.metrics,
-        ...processingMetrics,
+        // Get processing metrics from KV
+        const processingMetrics = ((await kv.get("document-processing:metrics")) as any) || {}
+        healthStatus.metrics = {
+          ...healthStatus.metrics,
+          ...processingMetrics,
+        }
       }
     } catch (error) {
       healthStatus.services.kv = {
@@ -62,12 +70,20 @@ export async function GET(request: NextRequest) {
 
     // Check Pinecone connectivity
     try {
-      const pineconeClient = createClient()
-      const stats = await pineconeClient.describeIndexStats()
-      healthStatus.services.pinecone = {
-        status: "healthy",
-        totalVectors: stats.totalVectorCount,
-        dimension: stats.dimension,
+      if (!process.env.PINECONE_API_KEY || !process.env.PINECONE_INDEX_NAME || !process.env.PINECONE_HOST) {
+        healthStatus.services.pinecone = {
+          status: "unhealthy",
+          error: "Missing required Pinecone environment variables",
+        }
+        healthStatus.status = "degraded"
+      } else {
+        const pineconeClient = createClient()
+        const stats = await pineconeClient.describeIndexStats()
+        healthStatus.services.pinecone = {
+          status: "healthy",
+          totalVectors: stats.totalVectorCount,
+          dimension: stats.dimension,
+        }
       }
     } catch (error) {
       healthStatus.services.pinecone = {
@@ -79,18 +95,26 @@ export async function GET(request: NextRequest) {
 
     // Check embedding generation
     try {
-      const embedding = await createEmbedding("This is a test query for the document processing health check.")
-      const dimensionsMatch = embedding.length === EMBEDDING_DIMENSIONS
-
-      healthStatus.services.embeddings = {
-        status: dimensionsMatch ? "healthy" : "degraded",
-        model: EMBEDDING_MODEL,
-        dimensions: embedding.length,
-        expectedDimensions: EMBEDDING_DIMENSIONS,
-      }
-
-      if (!dimensionsMatch) {
+      if (!process.env.OPENAI_API_KEY) {
+        healthStatus.services.embeddings = {
+          status: "unhealthy",
+          error: "Missing required OpenAI environment variable",
+        }
         healthStatus.status = "degraded"
+      } else {
+        const embedding = await createEmbedding("This is a test query for the document processing health check.")
+        const dimensionsMatch = embedding.length === EMBEDDING_DIMENSIONS
+
+        healthStatus.services.embeddings = {
+          status: dimensionsMatch ? "healthy" : "degraded",
+          model: EMBEDDING_MODEL,
+          dimensions: embedding.length,
+          expectedDimensions: EMBEDDING_DIMENSIONS,
+        }
+
+        if (!dimensionsMatch) {
+          healthStatus.status = "degraded"
+        }
       }
     } catch (error) {
       healthStatus.services.embeddings = {

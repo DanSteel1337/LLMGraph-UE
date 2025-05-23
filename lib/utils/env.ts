@@ -6,52 +6,33 @@
  * Runtime context: Edge Function
  */
 
-type EnvGroup = "SUPABASE" | "OPENAI" | "PINECONE" | "VERCEL_BLOB" | "VERCEL_KV" | "ALL"
-
-const ENV_GROUPS: Record<EnvGroup, string[]> = {
+// Define validation groups
+export const ENV_GROUPS = {
   SUPABASE: ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"],
   OPENAI: ["OPENAI_API_KEY"],
   PINECONE: ["PINECONE_API_KEY", "PINECONE_INDEX_NAME", "PINECONE_HOST"],
   VERCEL_BLOB: ["BLOB_READ_WRITE_TOKEN"],
   VERCEL_KV: ["KV_REST_API_URL", "KV_REST_API_TOKEN"],
-  ALL: [
-    "NEXT_PUBLIC_SUPABASE_URL",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-    "OPENAI_API_KEY",
-    "PINECONE_API_KEY",
-    "PINECONE_INDEX_NAME",
-    "PINECONE_HOST",
-    "BLOB_READ_WRITE_TOKEN",
-    "KV_REST_API_URL",
-    "KV_REST_API_TOKEN",
-  ],
 }
 
-export function validateEnv(groups: EnvGroup[] = ["ALL"]): void {
-  const requiredVars = new Set<string>()
+export function validateEnv(groups: string[] = Object.keys(ENV_GROUPS)): void {
+  const requiredVars: string[] = []
 
-  // Collect all required variables from the specified groups
-  for (const group of groups) {
-    for (const envVar of ENV_GROUPS[group]) {
-      requiredVars.add(envVar)
+  // Add variables from requested groups
+  groups.forEach((group) => {
+    if (ENV_GROUPS[group as keyof typeof ENV_GROUPS]) {
+      requiredVars.push(...ENV_GROUPS[group as keyof typeof ENV_GROUPS])
     }
-  }
+  })
 
-  // Check if all required variables are set
-  const missingVars: string[] = []
-
-  for (const envVar of requiredVars) {
-    if (!process.env[envVar]) {
-      missingVars.push(envVar)
-    }
-  }
+  const missingVars = requiredVars.filter((varName) => !process.env[varName])
 
   if (missingVars.length > 0) {
     throw new Error(`Missing required environment variables: ${missingVars.join(", ")}`)
   }
 }
 
-// Validate specific environment variable
+// Validate a single environment variable
 export function validateEnvVar(name: string): string {
   const value = process.env[name]
   if (!value) {

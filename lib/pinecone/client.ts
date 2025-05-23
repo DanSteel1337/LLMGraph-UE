@@ -17,8 +17,16 @@ function sanitizeHost(host: string): string {
 
 export function createClient(): PineconeRestClient {
   // Validate environment variables
-  if (!process.env.PINECONE_API_KEY || !process.env.PINECONE_INDEX_NAME || !process.env.PINECONE_HOST) {
-    throw new Error("Missing required Pinecone environment variables")
+  if (!process.env.PINECONE_API_KEY) {
+    throw new Error("Missing required environment variable: PINECONE_API_KEY")
+  }
+
+  if (!process.env.PINECONE_INDEX_NAME) {
+    throw new Error("Missing required environment variable: PINECONE_INDEX_NAME")
+  }
+
+  if (!process.env.PINECONE_HOST) {
+    throw new Error("Missing required environment variable: PINECONE_HOST")
   }
 
   if (!pineconeClient) {

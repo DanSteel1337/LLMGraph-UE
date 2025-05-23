@@ -15,8 +15,8 @@
 import { NextResponse } from "next/server"
 import { createClient } from "../../../lib/pinecone/client"
 import { createEmbedding } from "../../../lib/ai/embeddings"
-import { validateEnv } from "../../../lib/utils/env"
 import { kv } from "@vercel/kv"
+import { createEdgeClient } from "../../../lib/supabase-server"
 
 export const runtime = "edge"
 
@@ -24,7 +24,19 @@ async function testPinecone() {
   const startTime = Date.now()
 
   try {
-    validateEnv(["PINECONE"])
+    // Check if required environment variables are set
+    if (!process.env.PINECONE_API_KEY || !process.env.PINECONE_INDEX_NAME || !process.env.PINECONE_HOST) {
+      return {
+        status: "error",
+        message: "Missing required Pinecone environment variables",
+        latency: Date.now() - startTime,
+        missingVars: [
+          !process.env.PINECONE_API_KEY ? "PINECONE_API_KEY" : null,
+          !process.env.PINECONE_INDEX_NAME ? "PINECONE_INDEX_NAME" : null,
+          !process.env.PINECONE_HOST ? "PINECONE_HOST" : null,
+        ].filter(Boolean),
+      }
+    }
 
     // Get the custom REST client
     const pineconeClient = createClient()
@@ -95,7 +107,8 @@ async function testPinecone() {
     return {
       status: "error",
       message: e.message || "An error occurred",
-      stack: e.stack,
+      stack: process.env.NODE_ENV === "development" ? e.stack : undefined,
+      latency: Date.now() - startTime,
     }
   }
 }
@@ -104,7 +117,15 @@ async function testOpenAI() {
   const startTime = Date.now()
 
   try {
-    validateEnv(["OPENAI"])
+    // Check if required environment variables are set
+    if (!process.env.OPENAI_API_KEY) {
+      return {
+        status: "error",
+        message: "Missing required OpenAI environment variables",
+        latency: Date.now() - startTime,
+        missingVars: ["OPENAI_API_KEY"],
+      }
+    }
 
     // Test embedding generation
     const embedding = await createEmbedding("This is a test query for OpenAI diagnostics")
@@ -123,7 +144,8 @@ async function testOpenAI() {
     return {
       status: "error",
       message: e.message || "An error occurred",
-      stack: e.stack,
+      stack: process.env.NODE_ENV === "development" ? e.stack : undefined,
+      latency: Date.now() - startTime,
     }
   }
 }
@@ -132,7 +154,18 @@ async function testKV() {
   const startTime = Date.now()
 
   try {
-    validateEnv(["VERCEL_KV"])
+    // Check if required environment variables are set
+    if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+      return {
+        status: "error",
+        message: "Missing required KV environment variables",
+        latency: Date.now() - startTime,
+        missingVars: [
+          !process.env.KV_REST_API_URL ? "KV_REST_API_URL" : null,
+          !process.env.KV_REST_API_TOKEN ? "KV_REST_API_TOKEN" : null,
+        ].filter(Boolean),
+      }
+    }
 
     // Test KV operations
     const testKey = `debug-test-${Date.now()}`
@@ -166,7 +199,53 @@ async function testKV() {
     return {
       status: "error",
       message: e.message || "An error occurred",
-      stack: e.stack,
+      stack: process.env.NODE_ENV === "development" ? e.stack : undefined,
+      latency: Date.now() - startTime,
+    }
+  }
+}
+
+async function testSupabase() {
+  const startTime = Date.now()
+
+  try {
+    // Check if required environment variables are set
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      return {
+        status: "error",
+        message: "Missing required Supabase environment variables",
+        latency: Date.now() - startTime,
+        missingVars: [
+          !process.env.NEXT_PUBLIC_SUPABASE_URL ? "NEXT_PUBLIC_SUPABASE_URL" : null,
+          !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "NEXT_PUBLIC_SUPABASE_ANON_KEY" : null,
+        ].filter(Boolean),
+      }
+    }
+
+    // Test Supabase connection
+    const supabase = createEdgeClient()
+    const { data, error } = await supabase.auth.getSession()
+
+    if (error) {
+      throw error
+    }
+
+    const endTime = Date.now()
+
+    return {
+      status: "success",
+      latency: endTime - startTime,
+      sessionExists: !!data.session,
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/^(https?:\/\/)/, ""),
+      anonKeySet: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    }
+  } catch (e: any) {
+    console.error("Supabase test error:", e)
+    return {
+      status: "error",
+      message: e.message || "An error occurred",
+      stack: process.env.NODE_ENV === "development" ? e.stack : undefined,
+      latency: Date.now() - startTime,
     }
   }
 }
@@ -179,6 +258,7 @@ export async function GET() {
     pinecone: await testPinecone(),
     openai: await testOpenAI(),
     kv: await testKV(),
+    supabase: await testSupabase(),
   }
 
   return NextResponse.json({
