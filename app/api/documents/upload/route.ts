@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
     let blob
     try {
       blob = await put(`documents/${documentId}/${sanitizedFileName}`, file, {
-        access: "private",
+        access: "public", // Changed from "private" to "public" to fix the error
       })
       serverDebug("Blob upload successful:", blob.url)
     } catch (blobError) {
