@@ -1,3 +1,4 @@
+// app/api/documents/upload/route.ts
 import { type NextRequest, NextResponse } from "next/server"
 import { put } from "@vercel/blob"
 import { kv } from "@vercel/kv"
@@ -8,13 +9,10 @@ import { withErrorTracking, createRequestContext } from "../../../../lib/middlew
 export const runtime = "edge"
 
 async function uploadHandler(request: NextRequest) {
-  // Create request context for error tracking
   const context = createRequestContext(request)
 
-  // Validate environment variables
   validateEnv(["SUPABASE", "VERCEL_BLOB", "VERCEL_KV"])
 
-  // Validate authentication using edge client
   const supabase = createEdgeClient()
   const { data, error } = await supabase.auth.getUser()
 
@@ -29,25 +27,21 @@ async function uploadHandler(request: NextRequest) {
     throw new Error("Bad Request: No file provided")
   }
 
-  // Validate file type
   const allowedTypes = ["text/markdown", "text/plain", "application/pdf", "text/html"]
   if (!allowedTypes.includes(file.type)) {
     throw new Error(`Invalid file type: ${file.type}. Supported types: Markdown, Text, PDF, HTML`)
   }
 
-  // Validate file size (10MB limit)
   const maxSize = 10 * 1024 * 1024 // 10MB
   if (file.size > maxSize) {
     throw new Error(`File too large: ${file.size} bytes. Maximum size: ${maxSize} bytes`)
   }
 
-  // Upload to Vercel Blob
   const documentId = `doc-${Date.now()}`
   const blob = await put(`documents/${documentId}/${file.name}`, file, {
-    access: "private",
+    access: "public",
   })
 
-  // Store metadata in KV
   const metadata = {
     id: documentId,
     name: file.name,
@@ -60,20 +54,6 @@ async function uploadHandler(request: NextRequest) {
   }
 
   await kv.set(`document:${documentId}`, metadata)
-
-  // Trigger processing (non-blocking)
-  const processingUrl = new URL("/api/documents/process", request.url)
-  processingUrl.searchParams.set("id", documentId)
-
-  fetch(processingUrl.toString(), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-request-id": context.requestId || "unknown",
-    },
-  }).catch((error) => {
-    console.error("Failed to trigger document processing:", error)
-  })
 
   return NextResponse.json(
     {

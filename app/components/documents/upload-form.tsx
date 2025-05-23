@@ -1,46 +1,7 @@
-/**
- * Document Upload Form with Real-Time Progress Streaming
- *
- * Purpose: Handles file uploads with real-time processing feedback
- *
- * Features:
- * - File selection and validation for supported document types
- * - Real-time upload progress tracking with XMLHttpRequest
- * - Streaming progress updates during document processing
- * - Visual progress indicators with stage-specific styling
- * - Error handling with detailed error messages
- * - Cancellation support for long-running operations
- * - Integration with existing shadcn/ui components and error boundaries
- *
- * Runtime context: Client Component
- * Services: Vercel Blob (via upload API), Document Processing (via streaming API)
- *
- * Supported File Types:
- * - text/markdown (.md) - API documentation in Markdown format
- * - text/plain (.txt) - Plain text documentation
- * - application/pdf (.pdf) - PDF documentation files
- * - text/html (.html) - HTML documentation pages
- *
- * Processing Stages:
- * - uploading: File upload to Vercel Blob storage
- * - processing: Initial processing setup and content fetching
- * - chunking: Semantic text splitting and structure analysis
- * - embedding: Embedding generation with OpenAI text-embedding-3-large
- * - storing: Vector storage in Pinecone with metadata
- * - completed: Processing finished successfully
- * - error: Error occurred during any stage
- *
- * UI Integration:
- * - Uses shadcn/ui components (Card, Button, Progress, Alert)
- * - Follows existing error boundary patterns
- * - Integrates with toast notification system
- * - Responsive design with proper loading states
- */
-
+// app/components/documents/upload-form.tsx
 "use client"
 
 import type React from "react"
-
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -52,7 +13,7 @@ import { useRouter } from "next/navigation"
 import { ErrorBoundary, useErrorBoundaryWithToast } from "@/app/components/ui/error-boundary"
 import { cn } from "@/lib/utils"
 
-// Processing stages with enhanced styling aligned with project design
+// Processing stages
 const PROCESSING_STAGES = {
   uploading: {
     label: "Uploading",
@@ -112,7 +73,6 @@ interface ProcessingDetails {
   embeddingDimensions?: number
 }
 
-// Separate the upload form content into its own component to be wrapped by ErrorBoundary
 function UploadFormContent() {
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -131,7 +91,6 @@ function UploadFormContent() {
   const allowedTypes = ["text/markdown", "text/plain", "application/pdf", "text/html"]
   const allowedExtensions = [".md", ".txt", ".pdf", ".html"]
 
-  // Cleanup function for the stream
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
@@ -151,7 +110,6 @@ function UploadFormContent() {
         return
       }
 
-      // Additional file size validation (10MB limit)
       if (selectedFile.size > 10 * 1024 * 1024) {
         setError("File size too large. Maximum size is 10MB.")
         setFile(null)
@@ -178,78 +136,35 @@ function UploadFormContent() {
       const formData = new FormData()
       formData.append("file", file)
 
-      const xhr = new XMLHttpRequest()
-
-      xhr.upload.addEventListener("progress", (event) => {
-        if (event.lengthComputable) {
-          const percentComplete = Math.round((event.loaded / event.total) * 100)
-          setProgress(percentComplete)
-          setStatusMessage(
-            `Uploading: ${percentComplete}% (${(event.loaded / 1024 / 1024).toFixed(1)}MB / ${(event.total / 1024 / 1024).toFixed(1)}MB)`,
-          )
-        }
+      // Upload file
+      const uploadResponse = await fetch("/api/documents/upload", {
+        method: "POST",
+        body: formData,
       })
 
-      xhr.addEventListener("load", async () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const response = JSON.parse(xhr.responseText)
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json()
+        throw new Error(errorData.error || `Upload failed with status ${uploadResponse.status}`)
+      }
 
-            toast({
-              title: "Upload successful",
-              description: `${file.name} uploaded successfully. Starting processing...`,
-            })
+      const { id: documentId } = await uploadResponse.json()
 
-            // Start processing with streaming updates
-            await startProcessingWithStream(response.id)
-          } catch (jsonError) {
-            console.error("Response parsing error:", xhr.responseText)
-            setError("Upload succeeded but received unexpected response format")
-            setUploading(false)
-          }
-        } else {
-          handleUploadError(xhr)
-        }
+      toast({
+        title: "Upload successful",
+        description: `${file.name} uploaded successfully. Starting processing...`,
       })
 
-      xhr.addEventListener("error", () => {
-        setError("Network error occurred during upload")
-        setUploading(false)
-      })
-
-      xhr.addEventListener("abort", () => {
-        setError("Upload was cancelled")
-        setUploading(false)
-      })
-
-      xhr.open("POST", "/api/documents/upload")
-      xhr.send(formData)
+      // Start processing with streaming updates
+      await startProcessingWithStream(documentId)
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unknown error occurred")
       setUploading(false)
+      toast({
+        title: "Upload error",
+        description: err instanceof Error ? err.message : "Failed to upload document",
+        variant: "destructive",
+      })
     }
-  }
-
-  const handleUploadError = (xhr: XMLHttpRequest) => {
-    let errorMessage = "Upload failed"
-    try {
-      const errorResponse = JSON.parse(xhr.responseText)
-      errorMessage = errorResponse.error || errorMessage
-    } catch (parseError) {
-      if (xhr.responseText.includes("<!DOCTYPE")) {
-        if (xhr.status === 401) {
-          errorMessage = "Authentication required. Please log in again."
-        } else if (xhr.status >= 500) {
-          errorMessage = "Server error occurred during upload"
-        } else {
-          errorMessage = `Upload failed with status ${xhr.status}`
-        }
-      } else {
-        errorMessage = xhr.responseText || errorMessage
-      }
-    }
-    setError(errorMessage)
-    setUploading(false)
   }
 
   const startProcessingWithStream = async (documentId: string) => {
@@ -258,7 +173,6 @@ function UploadFormContent() {
     setStage("processing")
     setStatusMessage("Initializing document processing...")
 
-    // Create an abort controller for the fetch request
     abortControllerRef.current = new AbortController()
 
     try {
@@ -278,7 +192,6 @@ function UploadFormContent() {
         throw new Error("Response body is null")
       }
 
-      // Process the stream
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
 
@@ -289,7 +202,6 @@ function UploadFormContent() {
           break
         }
 
-        // Decode the chunk and split by newlines (each line is a JSON object)
         const chunk = decoder.decode(value, { stream: true })
         const lines = chunk.split("\n").filter((line) => line.trim())
 
@@ -319,7 +231,6 @@ function UploadFormContent() {
   }
 
   const handleProgressUpdate = (update: any) => {
-    // Update stage
     if (update.status && PROCESSING_STAGES[update.status as keyof typeof PROCESSING_STAGES]) {
       setStage(update.status as keyof typeof PROCESSING_STAGES)
     }
@@ -327,22 +238,18 @@ function UploadFormContent() {
       setStage(update.stage as keyof typeof PROCESSING_STAGES)
     }
 
-    // Update progress
     if (update.progress !== undefined) {
       setProgress(update.progress)
     }
 
-    // Update status message
     if (update.message) {
       setStatusMessage(update.message)
     }
 
-    // Update processing details
     if (update.details) {
       setProcessingDetails((prev) => ({ ...prev, ...update.details }))
     }
 
-    // Handle completion
     if (update.status === "processed" || update.stage === "completed") {
       setStage("completed")
       setProgress(100)
@@ -351,14 +258,12 @@ function UploadFormContent() {
         description: `${file?.name} has been processed successfully.`,
       })
 
-      // Reset form after delay
       setTimeout(() => {
         resetForm()
         router.refresh()
       }, 3000)
     }
 
-    // Handle errors
     if (update.status === "error" || update.stage === "error") {
       setStage("error")
       setError(update.message || "An error occurred during processing")
@@ -483,7 +388,6 @@ function UploadFormContent() {
 
                   <p className="text-xs text-muted-foreground">{statusMessage}</p>
 
-                  {/* Processing details toggle */}
                   {Object.keys(processingDetails).length > 0 && (
                     <div className="space-y-2">
                       <Button
@@ -556,7 +460,6 @@ function UploadFormContent() {
   )
 }
 
-// Main UploadForm component that includes the ErrorBoundary
 export function UploadForm() {
   const { handleError } = useErrorBoundaryWithToast()
 
