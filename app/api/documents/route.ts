@@ -1,29 +1,29 @@
 /**
  * Document Management API Route
- * 
+ *
  * Purpose: Handles CRUD operations for document metadata and storage
- * 
+ *
  * Features:
  * - GET: Retrieves document list or specific document by ID
  * - DELETE: Removes document from storage and associated vectors from Pinecone
  * - Manages document metadata in Vercel KV
  * - Integrates with Vercel Blob for file storage
- * 
+ *
  * Security: Requires valid Supabase authentication
  * Runtime: Vercel Edge Runtime for optimal performance
- * 
+ *
  * GET Request Formats:
  * - GET /api/documents - Returns all documents
  * - GET /api/documents?id=documentId - Returns specific document
- * 
+ *
  * DELETE Request Format:
  * - DELETE /api/documents?id=documentId - Deletes document and vectors
- * 
+ *
  * Response Formats:
  * GET (all): Document[]
  * GET (single): Document | 404
  * DELETE: { success: true } | Error
- * 
+ *
  * Document Structure:
  * {
  *   id: string,
@@ -79,10 +79,13 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     console.error("Document API error:", error)
-    return NextResponse.json({ 
-      error: "Internal Server Error", 
-      message: error instanceof Error ? error.message : "Failed to process document request" 
-    }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Internal Server Error",
+        message: error instanceof Error ? error.message : "Failed to process document request",
+      },
+      { status: 500 },
+    )
   }
 }
 
@@ -113,9 +116,12 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("Document deletion error:", error)
-    return NextResponse.json({ 
-      error: "Internal Server Error", 
-      message: error instanceof Error ? error.message : "Failed to delete document" 
-    }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Internal Server Error",
+        message: error instanceof Error ? error.message : "Failed to delete document",
+      },
+      { status: 500 },
+    )
   }
 }

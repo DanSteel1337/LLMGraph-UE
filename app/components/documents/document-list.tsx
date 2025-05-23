@@ -1,74 +1,114 @@
-/**
- * Purpose: Document list component
- * Logic:
- * - Renders a grid of document cards
- * - Handles empty state
- * Runtime context: Client Component
- */
 "use client"
 
+import { useState } from "react"
+import { Card, CardContent } from "../../../components/ui/card"
+import { Button } from "../../../components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../../components/ui/alert-dialog"
+import { useToast } from "../../../components/ui/use-toast"
 import { DocumentCard } from "./document-card"
-import { FileQuestion } from "lucide-react"
-import { ErrorBoundary, useErrorBoundaryWithToast } from "@/app/components/ui/error-boundary"
-import { Button } from "@/components/ui/button"
-import { AlertCircle } from "lucide-react"
 
-interface DocumentListProps {
-  documents: Array<{
-    id: string
-    name: string
-    type: string
-    size: number
-    uploadedAt: string
-    status: "uploaded" | "processing" | "processed" | "error"
-    error?: string
-    chunkCount?: number
-    vectorCount?: number
-  }>
+interface Document {
+  id: string
+  name: string
+  url: string
+  type: string
+  size: number
+  createdAt: string
+  status?: string
 }
 
-// Separate the document list content into its own component to be wrapped by ErrorBoundary
-function DocumentListContent({ documents }: DocumentListProps) {
-  if (documents.length === 0) {
+interface DocumentListProps {
+  documents: Document[]
+}
+
+export function DocumentList({ documents }: DocumentListProps) {
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null)
+  const [localDocuments, setLocalDocuments] = useState<Document[]>(documents)
+  const { toast } = useToast()
+
+  const handleDelete = async () => {
+    if (!selectedDocument) return
+
+    setIsDeleting(true)
+
+    try {
+      const response = await fetch(`/api/documents?id=${selectedDocument.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to delete document")
+      }
+
+      // Remove document from local state
+      setLocalDocuments((prev) => prev.filter((doc) => doc.id !== selectedDocument.id))
+
+      toast({
+        title: "Document deleted",
+        description: `${selectedDocument.name} has been deleted.`,
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete document",
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeleting(false)
+      setSelectedDocument(null)
+    }
+  }
+
+  if (localDocuments.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center p-8 text-center">
-        <FileQuestion className="h-12 w-12 text-muted-foreground mb-4" />
-        <h3 className="text-lg font-medium">No documents found</h3>
-        <p className="text-sm text-muted-foreground mt-1">Upload your first document to get started.</p>
-      </div>
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center p-6">
+          <p className="text-center text-muted-foreground">No documents found. Upload a document to get started.</p>
+        </CardContent>
+      </Card>
     )
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {documents.map((document) => (
-        <DocumentCard key={document.id} document={document} />
+    <div className="space-y-4">
+      {localDocuments.map((document) => (
+        <DocumentCard
+          key={document.id}
+          document={document}
+          onDelete={() => setSelectedDocument(document)}
+          status={document.status}
+        />
       ))}
+
+      <AlertDialog open={!!selectedDocument} onOpenChange={(open) => !open && setSelectedDocument(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the document and all associated vectors.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+                {isDeleting ? "Deleting..." : "Delete"}
+              </Button>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
-  )
-}
-
-// Main DocumentList component that includes the ErrorBoundary
-export function DocumentList({ documents }: DocumentListProps) {
-  const { handleError } = useErrorBoundaryWithToast()
-
-  return (
-    <ErrorBoundary
-      onError={(error) => handleError(error)}
-      fallback={
-        <div className="flex flex-col items-center justify-center p-8 text-center">
-          <AlertCircle className="h-12 w-12 text-destructive mb-4" />
-          <h3 className="text-lg font-medium">Error loading documents</h3>
-          <p className="text-sm text-muted-foreground mt-1 mb-4">
-            There was a problem loading your documents. Please try again.
-          </p>
-          <Button onClick={() => window.location.reload()} variant="default">
-            Refresh Page
-          </Button>
-        </div>
-      }
-    >
-      <DocumentListContent documents={documents} />
-    </ErrorBoundary>
   )
 }

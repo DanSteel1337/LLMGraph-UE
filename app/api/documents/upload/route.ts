@@ -1,8 +1,8 @@
 /**
  * Document Upload API Route
- * 
+ *
  * Purpose: Handles file uploads to Vercel Blob storage and initiates document processing
- * 
+ *
  * Features:
  * - Validates file types (Markdown, Text, PDF, HTML)
  * - Validates file content and size
@@ -10,15 +10,15 @@
  * - Stores document metadata in Vercel KV
  * - Triggers asynchronous document processing
  * - Generates unique document IDs with timestamps
- * 
+ *
  * Security: Requires valid Supabase authentication
  * Runtime: Vercel Edge Runtime for optimal performance
- * 
+ *
  * Request Format:
  * POST /api/documents/upload
  * Content-Type: multipart/form-data
  * Body: FormData with 'file' field containing the document
- * 
+ *
  * Response Format:
  * {
  *   id: string,           // Generated document ID
@@ -26,13 +26,13 @@
  *   url: string,          // Blob storage URL
  *   status: "uploaded"    // Initial status
  * }
- * 
+ *
  * Supported File Types:
  * - text/markdown (.md)
  * - text/plain (.txt)
  * - application/pdf (.pdf)
  * - text/html (.html)
- * 
+ *
  * Processing Flow:
  * 1. Validate authentication and file type
  * 2. Generate unique document ID
@@ -44,9 +44,9 @@
 
 import { type NextRequest, NextResponse } from "next/server"
 import { put } from "@vercel/blob"
-import { validateEnv } from "../../../lib/utils/env"
+import { validateEnv } from "../../../../lib/utils/env"
 import { kv } from "@vercel/kv"
-import { createEdgeClient } from "../../../lib/supabase-server"
+import { createEdgeClient } from "../../../../lib/supabase-server"
 
 export const runtime = "edge"
 
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate file extension
-    const hasValidExtension = ALLOWED_EXTENSIONS.some(ext => file.name.toLowerCase().endsWith(ext))
+    const hasValidExtension = ALLOWED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext))
     if (!hasValidExtension) {
       return NextResponse.json(
         { error: "Bad Request", message: "Invalid file extension. Supported extensions: .md, .txt, .pdf, .html" },
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate file name for security
-    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-_]/g, '_')
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-_]/g, "_")
 
     // Upload to Vercel Blob
     const documentId = `doc-${Date.now()}`
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
       headers: {
         "Content-Type": "application/json",
         // Forward auth cookie for the background request
-        "Cookie": request.headers.get("Cookie") || "",
+        Cookie: request.headers.get("Cookie") || "",
       },
     }).catch(console.error) // Non-blocking
 
@@ -141,9 +141,12 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Upload error:", error)
-    return NextResponse.json({ 
-      error: "Internal Server Error", 
-      message: error instanceof Error ? error.message : "Failed to upload document" 
-    }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Internal Server Error",
+        message: error instanceof Error ? error.message : "Failed to upload document",
+      },
+      { status: 500 },
+    )
   }
 }

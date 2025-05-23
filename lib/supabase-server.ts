@@ -55,7 +55,7 @@ export const createClient = cache(() => {
 let edgeClientCache: ReturnType<typeof createServerClient<Database>> | null = null
 
 // Edge runtime client (for API routes)
-export function createEdgeClient() {
+export const createEdgeClient = () => {
   // Use cached client if available (within the same request context)
   if (edgeClientCache) {
     return edgeClientCache

@@ -586,3 +586,6 @@ export function UploadForm() {
     </ErrorBoundary>
   )
 }
+
+// Export as named export (not default)
+export default UploadForm

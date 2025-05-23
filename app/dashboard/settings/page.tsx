@@ -6,8 +6,8 @@
  * Runtime context: Server Component
  * Services: Vercel KV (for settings storage)
  */
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { SettingsForm } from "@/app/components/settings/settings-form"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
+import { SettingsForm } from "../../components/settings/settings-form"
 import { kv } from "@vercel/kv"
 
 // Default settings

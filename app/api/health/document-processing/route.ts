@@ -14,8 +14,8 @@
 
 import { type NextRequest, NextResponse } from "next/server"
 import { kv } from "@vercel/kv"
-import { createClient } from "../../../lib/pinecone/client"
-import { createEmbedding, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL } from "../../../lib/ai/embeddings"
+import { createClient } from "../../../../lib/pinecone/client"
+import { createEmbedding, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL } from "../../../../lib/ai/embeddings"
 
 export const runtime = "edge"
 

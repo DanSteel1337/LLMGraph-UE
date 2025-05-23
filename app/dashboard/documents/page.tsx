@@ -7,11 +7,11 @@
  * Runtime context: Server Component
  * Services: Vercel Blob (for document list), Vercel KV (for processing status)
  */
-import { DocumentList } from "@/app/components/documents/document-list"
-import { UploadForm } from "@/app/components/documents/upload-form"
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getDocuments } from "@/lib/documents/storage"
+import { DocumentList } from "../../components/documents/document-list"
+import { UploadForm } from "../../components/documents/upload-form"
+import { Card, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs"
+import { getDocuments } from "../../../lib/documents/storage"
 
 export default async function DocumentsPage() {
   const documents = await getDocuments()

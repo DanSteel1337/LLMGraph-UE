@@ -3,9 +3,9 @@
 import type * as React from "react"
 import { useState, useEffect } from "react"
 import { ThemeProvider as NextThemesProvider, type ThemeProviderProps } from "next-themes"
-import { ErrorBoundary } from "@/app/components/ui/error-boundary"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
+import { ErrorBoundary } from "../app/components/ui/error-boundary"
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
+import { Button } from "./ui/button"
 import { AlertCircle, RefreshCw } from "lucide-react"
 
 interface CustomThemeProviderProps extends Omit<ThemeProviderProps, "attribute" | "defaultTheme" | "enableSystem"> {
