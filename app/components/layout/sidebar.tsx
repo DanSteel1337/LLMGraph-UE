@@ -1,15 +1,8 @@
 /**
- * Sidebar Navigation Component
- * 
- * Purpose: Provides main navigation for the dashboard
- * 
- * Features:
- * - Navigation links with active state highlighting
- * - Icons for each navigation item
- * - Responsive design (hidden on mobile)
- * - Added error logs page to navigation
- * 
- * Used in: Dashboard layout
+ * Purpose: Sidebar navigation component
+ * Logic:
+ * - Provides navigation links for the dashboard
+ * - Highlights active routes
  * Runtime context: Client Component
  */
 "use client"
@@ -18,7 +11,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { MessageSquare, FileText, Settings, Bug, AlertCircle } from "lucide-react"
+import { MessageSquare, FileText, Settings, Bug } from "lucide-react"
 
 const navItems = [
   {
@@ -40,11 +33,6 @@ const navItems = [
     name: "Debug",
     href: "/dashboard/debug",
     icon: Bug,
-  },
-  {
-    name: "Error Logs",
-    href: "/dashboard/errors",
-    icon: AlertCircle,
   },
 ]
 

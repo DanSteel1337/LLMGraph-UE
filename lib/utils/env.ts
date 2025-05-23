@@ -1,4 +1,11 @@
-// lib/utils/env.ts
+/**
+ * Purpose: Environment validation
+ * Logic:
+ * - Validates required environment variables
+ * Runtime context: Edge Function
+ */
+
+// Define validation groups
 export const ENV_GROUPS = {
   SUPABASE: ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"],
   OPENAI: ["OPENAI_API_KEY"],
@@ -10,6 +17,7 @@ export const ENV_GROUPS = {
 export function validateEnv(groups: string[] = Object.keys(ENV_GROUPS)) {
   const requiredVars: string[] = []
 
+  // Add variables from requested groups
   groups.forEach((group) => {
     if (ENV_GROUPS[group as keyof typeof ENV_GROUPS]) {
       requiredVars.push(...ENV_GROUPS[group as keyof typeof ENV_GROUPS])

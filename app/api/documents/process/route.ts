@@ -1,23 +1,49 @@
 /**
- * Document Processing API Route with SSE Support
- * 
- * Purpose: Handles document processing with real-time progress updates
- * 
+ * Document Processing API Route with Real-Time Progress Streaming
+ *
+ * Purpose: Processes uploaded documents into vector embeddings and streams progress updates
+ *
  * Features:
- * - GET: Server-Sent Events endpoint for progress streaming
- * - POST: Legacy endpoint (redirects to GET for SSE)
- * - Heartbeat mechanism to keep connections alive
- * - Proper cleanup on client disconnect
- * - Automatic abort handling
- * 
- * SSE Event Format:
- * - Progress updates: {id, status, progress, stage, message, details}
- * - Heartbeat: {type: "heartbeat", timestamp}
- * - Error: {id, status: "error", message, error}
- * - Complete: {id, status: "processed", progress: 100}
- * 
+ * - Fetches document content from Vercel Blob storage
+ * - Chunks documents using semantic text splitting (200-500 tokens text, 750-1500 code)
+ * - Generates embeddings using OpenAI text-embedding-3-large (3072 dimensions)
+ * - Stores vectors in Pinecone with rich metadata
+ * - Streams real-time progress updates via Server-Sent Events
+ * - Updates processing status in Vercel KV with TTL
+ * - Implements technical term weighting and version awareness
+ *
  * Security: Requires valid Supabase authentication
- * Runtime: Vercel Edge Runtime with streaming support
+ * Runtime: Vercel Edge Runtime with streaming support for long operations
+ *
+ * Request Format:
+ * POST /api/documents/process?id=documentId
+ *
+ * Response Format:
+ * Content-Type: text/plain (Server-Sent Events)
+ * Each line: JSON object with progress update
+ *
+ * Progress Update Structure:
+ * {
+ *   id: string,           // Document ID
+ *   status: string,       // Processing status
+ *   progress: number,     // Percentage (0-100)
+ *   stage: string,        // Current processing stage
+ *   message: string,      // Human-readable status message
+ *   details?: object      // Additional processing details
+ * }
+ *
+ * Processing Flow:
+ * 1. Validate authentication and document existence
+ * 2. Fetch document content from blob storage
+ * 3. Chunk document into semantic segments (with progress updates)
+ * 4. Generate embeddings in batches (with progress updates)
+ * 5. Store vectors in Pinecone with metadata (with progress updates)
+ * 6. Update final status in KV storage
+ *
+ * Error Handling:
+ * - Streams error messages through the same channel
+ * - Updates document status to "error" in KV
+ * - Provides detailed error context for debugging
  */
 
 import { type NextRequest, NextResponse } from "next/server"
@@ -28,15 +54,6 @@ import { getDocument } from "@/lib/documents/storage"
 import { createEdgeClient } from "@/lib/supabase-server"
 
 export const runtime = "edge"
-
-// SSE helper functions
-function createSSEMessage(data: any): string {
-  return `data: ${JSON.stringify(data)}\n\n`
-}
-
-function createHeartbeat(): string {
-  return createSSEMessage({ type: "heartbeat", timestamp: new Date().toISOString() })
-}
 
 // Helper to convert ReadableStream to string
 async function streamToString(stream: ReadableStream): Promise<string> {
@@ -53,17 +70,12 @@ async function streamToString(stream: ReadableStream): Promise<string> {
   return result
 }
 
-// GET handler for SSE
-export async function GET(request: NextRequest) {
-  // Validate environment variables
+export async function POST(request: NextRequest) {
+  // Validate only the environment variables needed for this route
   validateEnv(["SUPABASE", "VERCEL_BLOB", "VERCEL_KV", "OPENAI", "PINECONE"])
 
-  // Setup abort controller for cleanup
-  const abortController = new AbortController()
-  let heartbeatInterval: NodeJS.Timeout | null = null
-
   try {
-    // Validate authentication
+    // Validate authentication using edge client
     const supabase = createEdgeClient()
     const { data, error } = await supabase.auth.getUser()
 
@@ -71,7 +83,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get document ID
+    // Get document ID from query params
     const url = new URL(request.url)
     const documentId = url.searchParams.get("id")
 
@@ -86,204 +98,192 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Document not found" }, { status: 404 })
     }
 
-    // Create a transform stream for SSE
-    const { readable, writable } = new TransformStream({
-      start(controller) {
-        // Setup heartbeat to keep connection alive
-        heartbeatInterval = setInterval(() => {
-          try {
-            controller.enqueue(new TextEncoder().encode(createHeartbeat()))
-          } catch (error) {
-            // Connection might be closed
-            console.error("Heartbeat error:", error)
-          }
-        }, 30000) // Every 30 seconds
-
-        // Cleanup on abort
-        abortController.signal.addEventListener("abort", () => {
-          if (heartbeatInterval) {
-            clearInterval(heartbeatInterval)
-            heartbeatInterval = null
-          }
-          try {
-            controller.close()
-          } catch (error) {
-            // Controller might already be closed
-          }
-        })
-      },
-      transform(chunk, controller) {
-        controller.enqueue(chunk)
-      },
-      flush(controller) {
-        if (heartbeatInterval) {
-          clearInterval(heartbeatInterval)
-          heartbeatInterval = null
-        }
-        controller.close()
-      }
-    })
-
-    // Start processing in the background
-    const writer = writable.getWriter()
+    // Create a text encoder for the stream
     const encoder = new TextEncoder()
 
-    // Process document asynchronously
-    (async () => {
-      try {
-        // Send initial status
-        await writer.write(encoder.encode(createSSEMessage({
-          id: documentId,
-          status: "processing",
-          stage: "initializing",
-          progress: 0,
-          message: "Starting document processing...",
-          timestamp: new Date().toISOString(),
-        })))
+    // Create a streaming response using Server-Sent Events format
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          // Send initial progress update
+          controller.enqueue(
+            encoder.encode(
+              JSON.stringify({
+                id: documentId,
+                status: "processing",
+                stage: "initializing",
+                progress: 0,
+                message: "Starting document processing...",
+                timestamp: new Date().toISOString(),
+              }) + "\n",
+            ),
+          )
 
-        // Update status in KV
-        await kv.set(
-          `document:${documentId}`,
-          {
-            ...document,
-            status: "processing",
-            processingStartedAt: new Date().toISOString(),
-          },
-          { ex: 3600 } // 1 hour TTL
-        )
-
-        // Fetch document content
-        await writer.write(encoder.encode(createSSEMessage({
-          id: documentId,
-          status: "processing",
-          stage: "fetching",
-          progress: 5,
-          message: "Fetching document content from storage...",
-          timestamp: new Date().toISOString(),
-        })))
-
-        const response = await fetch(document.url, { signal: abortController.signal })
-        if (!response.ok) {
-          throw new Error(`Failed to fetch document: ${response.status} ${response.statusText}`)
-        }
-
-        const content = await streamToString(response.body!)
-
-        // Process document with progress callback
-        const { chunks, vectors } = await processDocumentWithProgress(
-          documentId,
-          content,
-          document.name,
-          document.type,
-          async (progress) => {
-            // Check if connection is still alive
-            if (abortController.signal.aborted) {
-              throw new Error("Processing aborted by client")
-            }
-
-            // Send progress update
-            await writer.write(encoder.encode(createSSEMessage({
-              id: documentId,
-              status: "processing",
-              stage: progress.stage,
-              progress: progress.percent,
-              message: progress.message,
-              details: progress.details,
-              timestamp: new Date().toISOString(),
-            })))
-          }
-        )
-
-        // Update final status
-        await kv.set(
-          `document:${documentId}`,
-          {
-            ...document,
-            status: "processed",
-            processingCompletedAt: new Date().toISOString(),
-            chunkCount: chunks.length,
-            vectorCount: vectors.length,
-          },
-          { ex: 86400 } // 24 hour TTL
-        )
-
-        // Send completion message
-        await writer.write(encoder.encode(createSSEMessage({
-          id: documentId,
-          status: "processed",
-          stage: "completed",
-          progress: 100,
-          message: "Document processing completed successfully",
-          details: {
-            chunkCount: chunks.length,
-            vectorCount: vectors.length,
-            processingTime: Date.now() - new Date(document.processingStartedAt || Date.now()).getTime(),
-          },
-          timestamp: new Date().toISOString(),
-        })))
-
-      } catch (error) {
-        console.error("Processing error:", error)
-
-        // Update error status
-        const document = await getDocument(documentId)
-        if (document) {
+          // Update status to processing with TTL
           await kv.set(
             `document:${documentId}`,
             {
               ...document,
-              status: "error",
-              error: error instanceof Error ? error.message : "Unknown error",
-              errorTimestamp: new Date().toISOString(),
+              status: "processing",
+              processingStartedAt: new Date().toISOString(),
             },
-            { ex: 3600 } // 1 hour TTL
+            { ex: 3600 }, // 1 hour TTL
           )
-        }
 
-        // Send error message
-        await writer.write(encoder.encode(createSSEMessage({
-          id: documentId,
-          status: "error",
-          stage: "error",
-          progress: 0,
-          message: error instanceof Error ? error.message : "Unknown error occurred",
-          error: {
-            type: error instanceof Error ? error.constructor.name : "UnknownError",
-            message: error instanceof Error ? error.message : "Unknown error",
-            stack: error instanceof Error && process.env.NODE_ENV === "development" ? error.stack : undefined,
-          },
-          timestamp: new Date().toISOString(),
-        })))
-      } finally {
-        // Clean up
-        if (heartbeatInterval) {
-          clearInterval(heartbeatInterval)
-        }
-        await writer.close()
-      }
-    })().catch(console.error)
+          // Send progress update for content fetching
+          controller.enqueue(
+            encoder.encode(
+              JSON.stringify({
+                id: documentId,
+                status: "processing",
+                stage: "fetching",
+                progress: 5,
+                message: "Fetching document content from storage...",
+                timestamp: new Date().toISOString(),
+              }) + "\n",
+            ),
+          )
 
-    // Return SSE response with proper headers
-    return new Response(readable, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Connection": "keep-alive",
-        "X-Accel-Buffering": "no", // Disable nginx buffering
-        "Transfer-Encoding": "chunked",
+          // Fetch document content
+          const response = await fetch(document.url)
+          if (!response.ok) {
+            throw new Error(`Failed to fetch document: ${response.status} ${response.statusText}`)
+          }
+          const content = await streamToString(response.body!)
+
+          // Send progress update for processing start
+          controller.enqueue(
+            encoder.encode(
+              JSON.stringify({
+                id: documentId,
+                status: "processing",
+                stage: "analyzing",
+                progress: 10,
+                message: "Document content fetched, analyzing structure...",
+                details: {
+                  contentLength: content.length,
+                  documentType: document.type,
+                  filename: document.name,
+                },
+                timestamp: new Date().toISOString(),
+              }) + "\n",
+            ),
+          )
+
+          // Process document with progress updates
+          const { chunks, vectors } = await processDocumentWithProgress(
+            documentId,
+            content,
+            document.name,
+            document.type,
+            (progress) => {
+              // Send progress updates through the stream
+              controller.enqueue(
+                encoder.encode(
+                  JSON.stringify({
+                    id: documentId,
+                    status: "processing",
+                    stage: progress.stage,
+                    progress: progress.percent,
+                    message: progress.message,
+                    details: progress.details,
+                    timestamp: new Date().toISOString(),
+                  }) + "\n",
+                ),
+              )
+            },
+          )
+
+          // Update final status with processing details and TTL
+          await kv.set(
+            `document:${documentId}`,
+            {
+              ...document,
+              status: "processed",
+              processingCompletedAt: new Date().toISOString(),
+              chunkCount: chunks.length,
+              vectorCount: vectors.length,
+            },
+            { ex: 86400 }, // 24 hour TTL for processed documents
+          )
+
+          // Send final success message
+          controller.enqueue(
+            encoder.encode(
+              JSON.stringify({
+                id: documentId,
+                status: "processed",
+                stage: "completed",
+                progress: 100,
+                message: "Document processing completed successfully",
+                details: {
+                  chunkCount: chunks.length,
+                  vectorCount: vectors.length,
+                  processingTime: Date.now() - new Date(document.processingStartedAt || Date.now()).getTime(),
+                },
+                timestamp: new Date().toISOString(),
+              }) + "\n",
+            ),
+          )
+
+          // Close the stream
+          controller.close()
+        } catch (error) {
+          console.error("Processing error:", error)
+
+          // Update status to error with TTL
+          const document = await getDocument(documentId)
+          if (document) {
+            await kv.set(
+              `document:${documentId}`,
+              {
+                ...document,
+                status: "error",
+                error: error instanceof Error ? error.message : "Unknown error",
+                errorTimestamp: new Date().toISOString(),
+              },
+              { ex: 3600 }, // 1 hour TTL for error states
+            )
+          }
+
+          // Send error message through the stream
+          controller.enqueue(
+            encoder.encode(
+              JSON.stringify({
+                id: documentId,
+                status: "error",
+                stage: "error",
+                progress: 0,
+                message: error instanceof Error ? error.message : "Unknown error occurred",
+                error: {
+                  type: error instanceof Error ? error.constructor.name : "UnknownError",
+                  message: error instanceof Error ? error.message : "Unknown error",
+                  stack: error instanceof Error ? error.stack : undefined,
+                },
+                timestamp: new Date().toISOString(),
+              }) + "\n",
+            ),
+          )
+
+          // Close the stream
+          controller.close()
+        }
       },
     })
 
+    // Return the streaming response with proper headers
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no", // Disable nginx buffering
+      },
+    })
   } catch (error) {
-    // Cleanup on error
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval)
-    }
-    abortController.abort()
-
     console.error("Processing initialization error:", error)
 
-    // Update error status if possible
+    // Update status to error if document ID is available
     const url = new URL(request.url)
     const documentId = url.searchParams.get("id")
 
@@ -299,7 +299,7 @@ export async function GET(request: NextRequest) {
               error: error instanceof Error ? error.message : "Unknown error",
               errorTimestamp: new Date().toISOString(),
             },
-            { ex: 3600 } // 1 hour TTL
+            { ex: 3600 }, // 1 hour TTL
           )
         }
       } catch (kvError) {
@@ -312,26 +312,7 @@ export async function GET(request: NextRequest) {
         error: "Failed to initialize document processing",
         message: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     )
   }
-}
-
-// POST handler (for backward compatibility)
-export async function POST(request: NextRequest) {
-  // Redirect to GET for SSE
-  const url = new URL(request.url)
-  return NextResponse.redirect(url.toString(), { status: 307 })
-}
-
-// OPTIONS handler for CORS
-export async function OPTIONS(request: NextRequest) {
-  return new Response(null, {
-    status: 200,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    },
-  })
 }

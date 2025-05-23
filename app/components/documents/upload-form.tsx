@@ -1,34 +1,46 @@
 /**
- * Document Upload Form Component with SSE Progress Tracking
+ * Document Upload Form with Real-Time Progress Streaming
  *
- * Purpose: Handles document uploads and real-time processing progress via Server-Sent Events
+ * Purpose: Handles file uploads with real-time processing feedback
  *
  * Features:
- * - File validation (type and size)
- * - Real-time progress updates via SSE
- * - Automatic reconnection with limits to prevent infinite loops
- * - Proper cleanup and abort handling
- * - Enhanced error recovery
- * - Visual progress indicators with stage details
- * - Maximum reconnection attempts to prevent memory leaks
+ * - File selection and validation for supported document types
+ * - Real-time upload progress tracking with XMLHttpRequest
+ * - Streaming progress updates during document processing
+ * - Visual progress indicators with stage-specific styling
+ * - Error handling with detailed error messages
+ * - Cancellation support for long-running operations
+ * - Integration with existing shadcn/ui components and error boundaries
  *
- * Supported file types:
- * - Markdown (.md)
- * - Text (.txt)
- * - PDF (.pdf)
- * - HTML (.html)
+ * Runtime context: Client Component
+ * Services: Vercel Blob (via upload API), Document Processing (via streaming API)
  *
- * Maximum file size: 10MB
+ * Supported File Types:
+ * - text/markdown (.md) - API documentation in Markdown format
+ * - text/plain (.txt) - Plain text documentation
+ * - application/pdf (.pdf) - PDF documentation files
+ * - text/html (.html) - HTML documentation pages
  *
- * Fixed Issues:
- * - Corrected SSE endpoint path
- * - Added reconnection attempt limits
- * - Improved error handling
+ * Processing Stages:
+ * - uploading: File upload to Vercel Blob storage
+ * - processing: Initial processing setup and content fetching
+ * - chunking: Semantic text splitting and structure analysis
+ * - embedding: Embedding generation with OpenAI text-embedding-3-large
+ * - storing: Vector storage in Pinecone with metadata
+ * - completed: Processing finished successfully
+ * - error: Error occurred during any stage
+ *
+ * UI Integration:
+ * - Uses shadcn/ui components (Card, Button, Progress, Alert)
+ * - Follows existing error boundary patterns
+ * - Integrates with toast notification system
+ * - Responsive design with proper loading states
  */
 
 "use client"
 
 import type React from "react"
+
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -39,9 +51,8 @@ import { Upload, FileText, AlertCircle, X, CheckCircle, Loader2 } from "lucide-r
 import { useRouter } from "next/navigation"
 import { ErrorBoundary, useErrorBoundaryWithToast } from "@/app/components/ui/error-boundary"
 import { cn } from "@/lib/utils"
-import { nanoid } from "nanoid"
 
-// Processing stages configuration
+// Processing stages with enhanced styling aligned with project design
 const PROCESSING_STAGES = {
   uploading: {
     label: "Uploading",
@@ -87,9 +98,6 @@ const PROCESSING_STAGES = {
   },
 }
 
-// Maximum reconnection attempts to prevent infinite loops
-const MAX_RECONNECT_ATTEMPTS = 5
-
 interface ProcessingDetails {
   chunkCount?: number
   vectorCount?: number
@@ -104,6 +112,7 @@ interface ProcessingDetails {
   embeddingDimensions?: number
 }
 
+// Separate the upload form content into its own component to be wrapped by ErrorBoundary
 function UploadFormContent() {
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -115,23 +124,18 @@ function UploadFormContent() {
   const [processingDetails, setProcessingDetails] = useState<ProcessingDetails>({})
   const [showDetails, setShowDetails] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const eventSourceRef = useRef<EventSource | null>(null)
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const reconnectAttemptsRef = useRef(0)
+  const abortControllerRef = useRef<AbortController | null>(null)
   const { toast } = useToast()
   const router = useRouter()
 
   const allowedTypes = ["text/markdown", "text/plain", "application/pdf", "text/html"]
   const allowedExtensions = [".md", ".txt", ".pdf", ".html"]
 
-  // Cleanup on unmount
+  // Cleanup function for the stream
   useEffect(() => {
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
       }
     }
   }, [])
@@ -147,6 +151,7 @@ function UploadFormContent() {
         return
       }
 
+      // Additional file size validation (10MB limit)
       if (selectedFile.size > 10 * 1024 * 1024) {
         setError("File size too large. Maximum size is 10MB.")
         setFile(null)
@@ -168,122 +173,153 @@ function UploadFormContent() {
     setStatusMessage("Uploading document to storage...")
     setError(null)
     setProcessingDetails({})
-    reconnectAttemptsRef.current = 0
 
     try {
       const formData = new FormData()
       formData.append("file", file)
 
-      // Upload file
-      const uploadResponse = await fetch("/api/documents/upload", {
-        method: "POST",
-        body: formData,
+      const xhr = new XMLHttpRequest()
+
+      xhr.upload.addEventListener("progress", (event) => {
+        if (event.lengthComputable) {
+          const percentComplete = Math.round((event.loaded / event.total) * 100)
+          setProgress(percentComplete)
+          setStatusMessage(
+            `Uploading: ${percentComplete}% (${(event.loaded / 1024 / 1024).toFixed(1)}MB / ${(event.total / 1024 / 1024).toFixed(1)}MB)`,
+          )
+        }
       })
 
-      if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.json()
-        throw new Error(errorData.error || `Upload failed with status ${uploadResponse.status}`)
-      }
+      xhr.addEventListener("load", async () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const response = JSON.parse(xhr.responseText)
 
-      const { id: documentId } = await uploadResponse.json()
+            toast({
+              title: "Upload successful",
+              description: `${file.name} uploaded successfully. Starting processing...`,
+            })
 
-      toast({
-        title: "Upload successful",
-        description: `${file.name} uploaded successfully. Starting processing...`,
+            // Start processing with streaming updates
+            await startProcessingWithStream(response.id)
+          } catch (jsonError) {
+            console.error("Response parsing error:", xhr.responseText)
+            setError("Upload succeeded but received unexpected response format")
+            setUploading(false)
+          }
+        } else {
+          handleUploadError(xhr)
+        }
       })
 
-      // Start processing with SSE
-      await startProcessingWithSSE(documentId)
+      xhr.addEventListener("error", () => {
+        setError("Network error occurred during upload")
+        setUploading(false)
+      })
+
+      xhr.addEventListener("abort", () => {
+        setError("Upload was cancelled")
+        setUploading(false)
+      })
+
+      xhr.open("POST", "/api/documents/upload")
+      xhr.send(formData)
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unknown error occurred")
       setUploading(false)
-      toast({
-        title: "Upload error",
-        description: err instanceof Error ? err.message : "Failed to upload document",
-        variant: "destructive",
-      })
     }
   }
 
-  const startProcessingWithSSE = async (documentId: string) => {
+  const handleUploadError = (xhr: XMLHttpRequest) => {
+    let errorMessage = "Upload failed"
+    try {
+      const errorResponse = JSON.parse(xhr.responseText)
+      errorMessage = errorResponse.error || errorMessage
+    } catch (parseError) {
+      if (xhr.responseText.includes("<!DOCTYPE")) {
+        if (xhr.status === 401) {
+          errorMessage = "Authentication required. Please log in again."
+        } else if (xhr.status >= 500) {
+          errorMessage = "Server error occurred during upload"
+        } else {
+          errorMessage = `Upload failed with status ${xhr.status}`
+        }
+      } else {
+        errorMessage = xhr.responseText || errorMessage
+      }
+    }
+    setError(errorMessage)
+    setUploading(false)
+  }
+
+  const startProcessingWithStream = async (documentId: string) => {
     setProcessing(true)
     setProgress(0)
     setStage("processing")
     setStatusMessage("Initializing document processing...")
 
-    const connectSSE = () => {
-      // Check if we've exceeded max reconnection attempts
-      if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
-        setError("Connection failed after multiple attempts. Please try again.")
-        setUploading(false)
-        setProcessing(false)
-        return
+    // Create an abort controller for the fetch request
+    abortControllerRef.current = new AbortController()
+
+    try {
+      const response = await fetch(`/api/documents/process?id=${documentId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        signal: abortControllerRef.current.signal,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Processing failed with status ${response.status}`)
       }
 
-      // Create unique session ID for reconnection
-      const sessionId = nanoid()
-      
-      // Close existing connection if any
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
+      if (!response.body) {
+        throw new Error("Response body is null")
       }
 
-      // Clear reconnection timeout
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-        reconnectTimeoutRef.current = null
-      }
+      // Process the stream
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
 
-      // Create new EventSource with correct endpoint
-      const eventSource = new EventSource(`/api/documents/process?id=${documentId}&session=${sessionId}`)
-      eventSourceRef.current = eventSource
+      while (true) {
+        const { done, value } = await reader.read()
 
-      eventSource.onopen = () => {
-        console.log("SSE connection opened")
-        reconnectAttemptsRef.current = 0 // Reset attempts on successful connection
-      }
+        if (done) {
+          break
+        }
 
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
+        // Decode the chunk and split by newlines (each line is a JSON object)
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split("\n").filter((line) => line.trim())
 
-          // Handle heartbeat
-          if (data.type === "heartbeat") {
-            return
+        for (const line of lines) {
+          try {
+            const update = JSON.parse(line)
+            handleProgressUpdate(update)
+          } catch (parseError) {
+            console.error("Error parsing progress update:", parseError, line)
           }
-
-          handleProgressUpdate(data)
-        } catch (parseError) {
-          console.error("Error parsing SSE message:", parseError, event.data)
         }
       }
-
-      eventSource.onerror = (error) => {
-        console.error("SSE error:", error)
-        eventSource.close()
-
-        // Only reconnect if still processing and not completed
-        if (processing && !["completed", "error"].includes(stage)) {
-          reconnectAttemptsRef.current++
-          setStatusMessage(`Connection lost. Reconnecting... (Attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`)
-          
-          // Attempt to reconnect after delay with exponential backoff
-          const delay = Math.min(3000 * Math.pow(1.5, reconnectAttemptsRef.current - 1), 30000)
-          reconnectTimeoutRef.current = setTimeout(() => {
-            console.log(`Attempting to reconnect... (Attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`)
-            connectSSE()
-          }, delay)
-        } else {
-          setUploading(false)
-          setProcessing(false)
-        }
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        setError(err instanceof Error ? err.message : "An unknown error occurred during processing")
+        setStage("error")
+        toast({
+          title: "Processing error",
+          description: err instanceof Error ? err.message : "An unknown error occurred during processing",
+          variant: "destructive",
+        })
       }
+    } finally {
+      setUploading(false)
+      setProcessing(false)
     }
-
-    connectSSE()
   }
 
   const handleProgressUpdate = (update: any) => {
+    // Update stage
     if (update.status && PROCESSING_STAGES[update.status as keyof typeof PROCESSING_STAGES]) {
       setStage(update.status as keyof typeof PROCESSING_STAGES)
     }
@@ -291,18 +327,22 @@ function UploadFormContent() {
       setStage(update.stage as keyof typeof PROCESSING_STAGES)
     }
 
+    // Update progress
     if (update.progress !== undefined) {
       setProgress(update.progress)
     }
 
+    // Update status message
     if (update.message) {
       setStatusMessage(update.message)
     }
 
+    // Update processing details
     if (update.details) {
       setProcessingDetails((prev) => ({ ...prev, ...update.details }))
     }
 
+    // Handle completion
     if (update.status === "processed" || update.stage === "completed") {
       setStage("completed")
       setProgress(100)
@@ -311,29 +351,19 @@ function UploadFormContent() {
         description: `${file?.name} has been processed successfully.`,
       })
 
-      // Close SSE connection
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-        eventSourceRef.current = null
-      }
-
+      // Reset form after delay
       setTimeout(() => {
         resetForm()
         router.refresh()
       }, 3000)
     }
 
+    // Handle errors
     if (update.status === "error" || update.stage === "error") {
       setStage("error")
       setError(update.message || "An error occurred during processing")
       setUploading(false)
       setProcessing(false)
-
-      // Close SSE connection
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-        eventSourceRef.current = null
-      }
     }
   }
 
@@ -347,28 +377,15 @@ function UploadFormContent() {
     setError(null)
     setProcessingDetails({})
     setShowDetails(false)
-    reconnectAttemptsRef.current = 0
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
-    }
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
-    }
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current)
-      reconnectTimeoutRef.current = null
     }
   }
 
   const cancelProcessing = () => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
-    }
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current)
-      reconnectTimeoutRef.current = null
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
     }
     resetForm()
   }
@@ -466,6 +483,7 @@ function UploadFormContent() {
 
                   <p className="text-xs text-muted-foreground">{statusMessage}</p>
 
+                  {/* Processing details toggle */}
                   {Object.keys(processingDetails).length > 0 && (
                     <div className="space-y-2">
                       <Button
@@ -538,6 +556,7 @@ function UploadFormContent() {
   )
 }
 
+// Main UploadForm component that includes the ErrorBoundary
 export function UploadForm() {
   const { handleError } = useErrorBoundaryWithToast()
 
