@@ -44,6 +44,7 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
+import { parseError, formatErrorForLogging, generateRequestId } from "./lib/utils/edge-error-parser"
 
 // Consistent storage key across all environments
 const STORAGE_KEY = "supabase-auth"
@@ -58,6 +59,9 @@ const ENV_CACHE = {
 const clientCache = new Map<string, any>()
 
 export async function middleware(request: NextRequest) {
+  const requestId = generateRequestId()
+  const startTime = Date.now()
+
   // Quick path check to avoid unnecessary processing
   const { pathname } = request.nextUrl
 
@@ -72,20 +76,65 @@ export async function middleware(request: NextRequest) {
   }
 
   try {
+    // Log middleware start
+    console.log(
+      "Middleware processing:",
+      JSON.stringify(
+        {
+          requestId,
+          method: request.method,
+          pathname,
+          userAgent: request.headers.get("user-agent"),
+          timestamp: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+    )
+
     // Create response to modify
     const res = NextResponse.next()
 
+    // Add request ID to response headers
+    res.headers.set("x-request-id", requestId)
+
     // Validate environment variables
     if (!ENV_CACHE.url || !ENV_CACHE.key) {
-      console.error("Missing Supabase environment variables")
+      const error = new Error("Missing Supabase environment variables")
+      const parsedError = parseError(error, {
+        requestId,
+        url: request.url,
+        timestamp: new Date().toISOString(),
+      })
+
+      const logEntry = formatErrorForLogging(parsedError, {
+        requestId,
+        timestamp: new Date().toISOString(),
+        operation: "middleware-env-validation",
+        pathname,
+        envVarsPresent: {
+          url: !!ENV_CACHE.url,
+          key: !!ENV_CACHE.key,
+        },
+      })
+
+      console.error("Middleware environment validation failed:", JSON.stringify(logEntry, null, 2))
+
       if (pathname.startsWith("/api/")) {
-        return NextResponse.json({ error: "Configuration error" }, { status: 500 })
+        return NextResponse.json(
+          {
+            error: "Configuration error",
+            requestId,
+            timestamp: new Date().toISOString(),
+          },
+          {
+            status: 500,
+            headers: { "x-request-id": requestId },
+          },
+        )
       }
       return res
     }
-
-    // Generate a unique key for this request to use for caching
-    const requestId = request.headers.get("x-request-id") || request.url
 
     // Use cached client if available
     let supabase = clientCache.get(requestId)
@@ -149,23 +198,76 @@ export async function middleware(request: NextRequest) {
 
     // If accessing protected API route without authentication, return 401
     if (isProtectedApiRoute && (error || !data.user)) {
+      const authError = error || new Error("No authenticated user")
+      const parsedError = parseError(authError, {
+        requestId,
+        url: request.url,
+        timestamp: new Date().toISOString(),
+      })
+
+      const logEntry = formatErrorForLogging(parsedError, {
+        requestId,
+        timestamp: new Date().toISOString(),
+        operation: "middleware-auth-validation",
+        pathname,
+        hasUser: !!data.user,
+        authError: error?.message,
+      })
+
+      console.error("Middleware authentication failed:", JSON.stringify(logEntry, null, 2))
+
       return NextResponse.json(
         {
           error: "Unauthorized",
           message: "Authentication required",
+          requestId,
+          timestamp: new Date().toISOString(),
         },
         {
           status: 401,
           headers: {
             "Content-Type": "application/json",
+            "x-request-id": requestId,
           },
         },
       )
     }
 
+    // Log successful middleware completion
+    const duration = Date.now() - startTime
+    console.log(
+      "Middleware completed:",
+      JSON.stringify(
+        {
+          requestId,
+          pathname,
+          authenticated: !!data.user,
+          duration: `${duration}ms`,
+          timestamp: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+    )
+
     return res
   } catch (error) {
-    console.error("Middleware error:", error)
+    const duration = Date.now() - startTime
+    const parsedError = parseError(error instanceof Error ? error : new Error(String(error)), {
+      requestId,
+      url: request.url,
+      timestamp: new Date().toISOString(),
+    })
+
+    const logEntry = formatErrorForLogging(parsedError, {
+      requestId,
+      timestamp: new Date().toISOString(),
+      operation: "middleware-execution",
+      pathname,
+      duration: `${duration}ms`,
+    })
+
+    console.error("Middleware error:", JSON.stringify(logEntry, null, 2))
 
     // If there's an error in an API route, return 500
     if (pathname.startsWith("/api/")) {
@@ -173,11 +275,14 @@ export async function middleware(request: NextRequest) {
         {
           error: "Internal Server Error",
           message: "Authentication service unavailable",
+          requestId,
+          timestamp: new Date().toISOString(),
         },
         {
           status: 500,
           headers: {
             "Content-Type": "application/json",
+            "x-request-id": requestId,
           },
         },
       )
