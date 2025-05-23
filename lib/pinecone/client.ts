@@ -7,7 +7,6 @@
  * Runtime context: Edge Function
  */
 import { PineconeRestClient } from "./rest-client"
-import { validateEnv } from "../utils/env"
 
 let pineconeClient: PineconeRestClient | null = null
 
@@ -17,13 +16,16 @@ function sanitizeHost(host: string): string {
 }
 
 export function createClient(): PineconeRestClient {
-  validateEnv(["PINECONE"])
+  // Validate environment variables
+  if (!process.env.PINECONE_API_KEY || !process.env.PINECONE_INDEX_NAME || !process.env.PINECONE_HOST) {
+    throw new Error("Missing required Pinecone environment variables")
+  }
 
   if (!pineconeClient) {
-    const host = sanitizeHost(process.env.PINECONE_HOST!)
+    const host = sanitizeHost(process.env.PINECONE_HOST)
 
     // Only log in development
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === "development") {
       console.log("Creating Pinecone client with:", {
         indexName: process.env.PINECONE_INDEX_NAME,
         host: host,
@@ -32,8 +34,8 @@ export function createClient(): PineconeRestClient {
     }
 
     pineconeClient = new PineconeRestClient({
-      apiKey: process.env.PINECONE_API_KEY!,
-      indexName: process.env.PINECONE_INDEX_NAME!,
+      apiKey: process.env.PINECONE_API_KEY,
+      indexName: process.env.PINECONE_INDEX_NAME,
       host: host,
     })
   }

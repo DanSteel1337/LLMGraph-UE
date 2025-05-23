@@ -11,9 +11,9 @@ import type React from "react"
  */
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Header } from "@/app/components/layout/header"
-import { Sidebar } from "@/app/components/layout/sidebar"
-import { useAuth } from "@/app/components/auth/auth-provider"
+import { Header } from "../components/layout/header"
+import { Sidebar } from "../components/layout/sidebar"
+import { useAuth } from "../components/auth/auth-provider"
 
 export default function DashboardLayout({
   children,

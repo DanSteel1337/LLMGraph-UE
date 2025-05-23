@@ -1,188 +1,128 @@
-/**
- * Purpose: Document card component with enhanced processing status display
- * Logic:
- * - Displays document information
- * - Shows detailed processing status and progress
- * - Provides delete functionality
- * Runtime context: Client Component
- */
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { CustomBadge } from "@/app/components/ui/custom-badge"
-import { Trash2, FileText, AlertCircle, Info } from "lucide-react"
-import { useToast } from "@/components/ui/use-toast"
-import { useRouter } from "next/navigation"
-import { formatBytes, formatDate } from "@/lib/utils"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../../components/ui/card"
+import { Button } from "../../../components/ui/button"
+import { CustomBadge } from "../ui/custom-badge"
+import { FileText, Trash2, RefreshCw, AlertCircle, CheckCircle } from "lucide-react"
+import { formatDistanceToNow } from "date-fns"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip"
 
 interface DocumentCardProps {
-  document: {
-    id: string
-    name: string
-    type: string
-    size: number
-    uploadedAt: string
-    status: "uploaded" | "processing" | "processed" | "error"
-    error?: string
-    chunkCount?: number
-    vectorCount?: number
-    processingStartedAt?: string
-    processingCompletedAt?: string
-  }
+  id: string
+  title: string
+  description?: string
+  createdAt: Date
+  status: "processing" | "indexed" | "error"
+  chunks?: number
+  onDelete?: (id: string) => void
+  onRefresh?: (id: string) => void
 }
 
-export function DocumentCard({ document }: DocumentCardProps) {
+export function DocumentCard({
+  id,
+  title,
+  description,
+  createdAt,
+  status,
+  chunks = 0,
+  onDelete,
+  onRefresh,
+}: DocumentCardProps) {
   const [isDeleting, setIsDeleting] = useState(false)
-  const { toast } = useToast()
-  const router = useRouter()
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const handleDelete = async () => {
-    if (confirm(`Are you sure you want to delete ${document.name}?`)) {
-      setIsDeleting(true)
-
-      try {
-        const response = await fetch(`/api/documents?id=${document.id}`, {
-          method: "DELETE",
-        })
-
-        if (!response.ok) {
-          throw new Error("Failed to delete document")
-        }
-
-        toast({
-          title: "Document deleted",
-          description: `${document.name} has been deleted.`,
-        })
-
-        router.refresh()
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: error instanceof Error ? error.message : "Failed to delete document",
-          variant: "destructive",
-        })
-      } finally {
-        setIsDeleting(false)
-      }
+    if (!onDelete) return
+    setIsDeleting(true)
+    try {
+      onDelete(id)
+    } catch (error) {
+      console.error("Error deleting document:", error)
+    } finally {
+      setIsDeleting(false)
     }
   }
 
-  const getStatusBadge = () => {
-    switch (document.status) {
-      case "uploaded":
-        return <CustomBadge variant="outline">Uploaded</CustomBadge>
+  const handleRefresh = async () => {
+    if (!onRefresh) return
+    setIsRefreshing(true)
+    try {
+      onRefresh(id)
+    } catch (error) {
+      console.error("Error refreshing document:", error)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
+  const getStatusIcon = () => {
+    switch (status) {
+      case "indexed":
+        return <CheckCircle className="h-4 w-4" />
       case "processing":
-        return <CustomBadge variant="secondary">Processing</CustomBadge>
-      case "processed":
-        return <CustomBadge variant="success">Processed</CustomBadge>
+        return <RefreshCw className="h-4 w-4 animate-spin" />
       case "error":
-        return <CustomBadge variant="destructive">Error</CustomBadge>
+        return <AlertCircle className="h-4 w-4" />
       default:
-        return null
+        return <FileText className="h-4 w-4" />
     }
   }
-
-  // Calculate processing time if available
-  const getProcessingTime = () => {
-    if (document.processingStartedAt && document.processingCompletedAt) {
-      const start = new Date(document.processingStartedAt).getTime()
-      const end = new Date(document.processingCompletedAt).getTime()
-      const durationMs = end - start
-
-      // Format duration nicely
-      if (durationMs < 1000) {
-        return `${durationMs}ms`
-      } else if (durationMs < 60000) {
-        return `${(durationMs / 1000).toFixed(1)}s`
-      } else {
-        const minutes = Math.floor(durationMs / 60000)
-        const seconds = Math.floor((durationMs % 60000) / 1000)
-        return `${minutes}m ${seconds}s`
-      }
-    }
-    return null
-  }
-
-  const processingTime = getProcessingTime()
 
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader className="pb-2">
-        <div className="flex justify-between items-start">
-          <CardTitle className="text-base truncate">{document.name}</CardTitle>
-          {getStatusBadge()}
+        <div className="flex items-start justify-between">
+          <div className="space-y-1">
+            <CardTitle className="line-clamp-1">{title}</CardTitle>
+            <CardDescription>Added {formatDistanceToNow(createdAt, { addSuffix: true })}</CardDescription>
+          </div>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <CustomBadge
+                    variant={status === "indexed" ? "success" : status === "processing" ? "warning" : "destructive"}
+                  >
+                    {getStatusIcon()}
+                    <span className="ml-1">
+                      {status === "indexed" ? "Indexed" : status === "processing" ? "Processing" : "Error"}
+                    </span>
+                  </CustomBadge>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                {status === "indexed"
+                  ? "Document has been processed and indexed"
+                  : status === "processing"
+                    ? "Document is being processed"
+                    : "Error processing document"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </CardHeader>
-      <CardContent className="pb-2">
-        <div className="text-sm text-muted-foreground space-y-1">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            <span>{document.type}</span>
-          </div>
-          <div>Size: {formatBytes(document.size)}</div>
-          <div>Uploaded: {formatDate(document.uploadedAt)}</div>
-
-          {document.status === "processed" && (
-            <>
-              <div className="flex items-center gap-1">
-                <span>Chunks: {document.chunkCount}</span>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-3 w-3 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Semantic chunks created from the document</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              <div className="flex items-center gap-1">
-                <span>Vectors: {document.vectorCount}</span>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-3 w-3 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Vector embeddings stored in Pinecone</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-              {processingTime && (
-                <div className="flex items-center gap-1">
-                  <span>Processing time: {processingTime}</span>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="h-3 w-3 text-muted-foreground cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Total time to process the document</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              )}
-            </>
-          )}
-
-          {document.status === "error" && document.error && (
-            <div className="flex items-start gap-2 text-destructive mt-2">
-              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>{document.error}</span>
-            </div>
-          )}
+      <CardContent>
+        {description && <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{description}</p>}
+        <div className="flex items-center text-xs text-muted-foreground">
+          <FileText className="mr-1 h-3 w-3" />
+          <span>{chunks} chunks</span>
         </div>
       </CardContent>
-      <CardFooter>
-        <Button variant="destructive" size="sm" className="w-full" onClick={handleDelete} disabled={isDeleting}>
-          <Trash2 className="h-4 w-4 mr-2" />
-          {isDeleting ? "Deleting..." : "Delete"}
+      <CardFooter className="flex justify-between pt-2">
+        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing || isDeleting || !onRefresh}>
+          {isRefreshing ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+          Refresh
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleDelete}
+          disabled={isDeleting || isRefreshing || !onDelete}
+          className="text-destructive hover:text-destructive"
+        >
+          {isDeleting ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+          Delete
         </Button>
       </CardFooter>
     </Card>

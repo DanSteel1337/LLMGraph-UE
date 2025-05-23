@@ -48,6 +48,7 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(settings),
+        credentials: "include",
       })
 
       if (!response.ok) {

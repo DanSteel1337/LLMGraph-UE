@@ -24,6 +24,10 @@ export class PineconeRestClient {
   private baseUrl: string
 
   constructor(config: PineconeConfig) {
+    if (!config.apiKey) throw new Error("Pinecone API key is required")
+    if (!config.indexName) throw new Error("Pinecone index name is required")
+    if (!config.host) throw new Error("Pinecone host is required")
+
     this.apiKey = config.apiKey
     this.indexName = config.indexName
 
@@ -37,22 +41,31 @@ export class PineconeRestClient {
    */
   async query(request: PineconeQueryRequest): Promise<PineconeQueryResponse> {
     return retryPineconeOperation(async () => {
-      const response = await fetch(`${this.baseUrl}/query`, {
-        method: "POST",
-        headers: {
-          "Api-Key": this.apiKey,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(request),
-      })
+      try {
+        const response = await fetch(`${this.baseUrl}/query`, {
+          method: "POST",
+          headers: {
+            "Api-Key": this.apiKey,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(request),
+        })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Pinecone query failed: ${response.status} - ${errorText}`)
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`Pinecone query failed: ${response.status} - ${errorText}`)
+        }
+
+        return await response.json()
+      } catch (error) {
+        console.error("Pinecone query error:", error)
+        // Enhance error with more context
+        if (error instanceof Error) {
+          error.message = `Pinecone Query Error (${this.indexName}): ${error.message}`
+        }
+        throw error
       }
-
-      return await response.json()
     })
   }
 
@@ -61,27 +74,36 @@ export class PineconeRestClient {
    */
   async upsert(vectors: PineconeVector[], namespace?: string): Promise<PineconeUpsertResponse> {
     return retryPineconeOperation(async () => {
-      const request: PineconeUpsertRequest = {
-        vectors,
-        namespace,
+      try {
+        const request: PineconeUpsertRequest = {
+          vectors,
+          namespace,
+        }
+
+        const response = await fetch(`${this.baseUrl}/vectors/upsert`, {
+          method: "POST",
+          headers: {
+            "Api-Key": this.apiKey,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(request),
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`Pinecone upsert failed: ${response.status} - ${errorText}`)
+        }
+
+        return await response.json()
+      } catch (error) {
+        console.error("Pinecone upsert error:", error)
+        // Enhance error with more context
+        if (error instanceof Error) {
+          error.message = `Pinecone Upsert Error (${this.indexName}): ${error.message}`
+        }
+        throw error
       }
-
-      const response = await fetch(`${this.baseUrl}/vectors/upsert`, {
-        method: "POST",
-        headers: {
-          "Api-Key": this.apiKey,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(request),
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Pinecone upsert failed: ${response.status} - ${errorText}`)
-      }
-
-      return await response.json()
     })
   }
 
@@ -90,22 +112,31 @@ export class PineconeRestClient {
    */
   async delete(options: PineconeDeleteRequest): Promise<PineconeDeleteResponse> {
     return retryPineconeOperation(async () => {
-      const response = await fetch(`${this.baseUrl}/vectors/delete`, {
-        method: "POST",
-        headers: {
-          "Api-Key": this.apiKey,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(options),
-      })
+      try {
+        const response = await fetch(`${this.baseUrl}/vectors/delete`, {
+          method: "POST",
+          headers: {
+            "Api-Key": this.apiKey,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(options),
+        })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Pinecone delete failed: ${response.status} - ${errorText}`)
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`Pinecone delete failed: ${response.status} - ${errorText}`)
+        }
+
+        return await response.json()
+      } catch (error) {
+        console.error("Pinecone delete error:", error)
+        // Enhance error with more context
+        if (error instanceof Error) {
+          error.message = `Pinecone Delete Error (${this.indexName}): ${error.message}`
+        }
+        throw error
       }
-
-      return await response.json()
     })
   }
 
@@ -155,6 +186,7 @@ export class PineconeRestClient {
 
         return await response.json()
       } catch (error) {
+        console.error("Pinecone describe_index_stats error:", error)
         // Enhance error with more context
         if (error instanceof Error) {
           error.message = `Pinecone API Error (${this.indexName}@${this.baseUrl}): ${error.message}`

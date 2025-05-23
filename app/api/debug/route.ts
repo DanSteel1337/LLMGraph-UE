@@ -1,139 +1,101 @@
 /**
  * Debug API Route
  *
- * Purpose: Provides diagnostic information and testing for system components
+ * Purpose: Provides diagnostic information for system components
  *
  * Features:
- * - Tests connectivity to Pinecone, OpenAI, and KV
+ * - Tests Pinecone connectivity using the custom REST client
  * - Validates embedding generation
- * - Tests vector operations
- * - Provides detailed diagnostic information
+ * - Performs test operations (upsert, query, delete)
+ * - Returns detailed diagnostic information
  *
- * Security: Requires valid Supabase authentication
- * Runtime: Vercel Edge Runtime for optimal performance
+ * Runtime: Vercel Edge Runtime
  */
 
 import { NextResponse } from "next/server"
 import { createClient } from "../../../lib/pinecone/client"
-import { createEmbedding, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL } from "../../../lib/ai/embeddings"
+import { createEmbedding } from "../../../lib/ai/embeddings"
+import { validateEnv } from "../../../lib/utils/env"
 import { kv } from "@vercel/kv"
-import { createEdgeClient } from "../../../lib/supabase-server"
 
 export const runtime = "edge"
-
-export async function GET(request: Request) {
-  const startTime = Date.now()
-
-  try {
-    // Validate authentication
-    const supabase = createEdgeClient()
-    const { data, error } = await supabase.auth.getUser()
-
-    if (error || !data.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    // Don't validate env variables here since we're checking their status
-    // validateEnv()
-
-    const results = {
-      timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV || "unknown",
-      runtime: "edge",
-      tests: {
-        pinecone: await testPinecone(),
-        openai: await testOpenAI(),
-        kv: await testKV(),
-      },
-      responseTime: 0,
-    }
-
-    // Calculate response time
-    results.responseTime = Date.now() - startTime
-
-    return NextResponse.json(results)
-  } catch (error) {
-    console.error("Debug API error:", error)
-
-    return NextResponse.json(
-      {
-        status: "error",
-        timestamp: new Date().toISOString(),
-        error: error instanceof Error ? error.message : "Unknown error",
-        responseTime: Date.now() - startTime,
-      },
-      { status: 500 },
-    )
-  }
-}
 
 async function testPinecone() {
   const startTime = Date.now()
 
   try {
-    if (!process.env.PINECONE_API_KEY || !process.env.PINECONE_INDEX_NAME || !process.env.PINECONE_HOST) {
-      return {
-        status: "error",
-        message: "Pinecone environment variables not set",
-        latency: Date.now() - startTime,
-      }
-    }
+    validateEnv(["PINECONE"])
 
+    // Get the custom REST client
     const pineconeClient = createClient()
 
-    // Test describeIndexStats
-    const stats = await pineconeClient.describeIndexStats()
+    // Test index stats
+    const statsResult = await pineconeClient.describeIndexStats()
 
-    // Test vector operations with a test vector
-    const testVector = Array(EMBEDDING_DIMENSIONS)
-      .fill(0)
-      .map(() => Math.random())
+    // Generate a test embedding using our custom function
+    const testEmbedding = await createEmbedding("test query for diagnostic purposes")
+
+    // Test vector operations
     const testId = `test-vector-${Date.now()}`
 
     // Test upsert
     const upsertResult = await pineconeClient.upsert([
       {
         id: testId,
-        values: testVector,
-        metadata: { type: "test" },
+        values: testEmbedding,
+        metadata: {
+          type: "test",
+          text: "test vector for diagnostic purposes",
+          timestamp: new Date().toISOString(),
+        },
       },
     ])
 
     // Test query
     const queryResult = await pineconeClient.query({
-      vector: testVector,
+      vector: testEmbedding,
       topK: 1,
       includeMetadata: true,
     })
 
     // Test delete
-    const deleteResult = await pineconeClient.delete({ ids: [testId] })
+    const deleteResult = await pineconeClient.delete({
+      ids: [testId],
+    })
+
+    const endTime = Date.now()
+
+    // Sanitize host for security
+    const host = process.env.PINECONE_HOST?.replace(/^(https?:\/\/)/, "") || "not-set"
 
     return {
       status: "success",
-      latency: Date.now() - startTime,
-      stats: {
-        totalVectors: stats.totalVectorCount,
-        dimension: stats.dimension,
-        namespaces: Object.keys(stats.namespaces || {}),
-      },
-      operations: {
-        upsert: { status: "success", upsertedCount: upsertResult.upsertedCount },
-        query: { status: "success", matchCount: queryResult.matches?.length || 0 },
-        delete: { status: "success", deletedCount: deleteResult.deletedCount },
-      },
+      latency: endTime - startTime,
+      embeddingModel: "text-embedding-3-large",
+      embeddingDimensions: testEmbedding.length,
       config: {
-        host: sanitizeHost(process.env.PINECONE_HOST),
+        host: host,
         indexName: process.env.PINECONE_INDEX_NAME,
         apiKeySet: !!process.env.PINECONE_API_KEY,
       },
+      stats: {
+        totalVectors: statsResult.totalVectorCount,
+        dimension: statsResult.dimension,
+        namespaces: Object.keys(statsResult.namespaces || {}),
+      },
+      operations: {
+        embedding: { status: "success", dimensions: testEmbedding.length },
+        upsert: { status: "success", result: upsertResult },
+        query: { status: "success", matches: queryResult.matches?.length || 0 },
+        delete: { status: "success", result: deleteResult },
+      },
     }
-  } catch (error) {
-    console.error("Pinecone test error:", error)
+  } catch (e: any) {
+    console.error("Pinecone test error:", e)
     return {
       status: "error",
-      message: error instanceof Error ? error.message : "Unknown error",
-      latency: Date.now() - startTime,
+      message: e.message || "An error occurred",
+      stack: e.stack,
     }
   }
 }
@@ -142,32 +104,26 @@ async function testOpenAI() {
   const startTime = Date.now()
 
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      return {
-        status: "error",
-        message: "OpenAI API key not set",
-        latency: Date.now() - startTime,
-      }
-    }
+    validateEnv(["OPENAI"])
 
     // Test embedding generation
-    const testText = "This is a test query for the debug API."
-    const embedding = await createEmbedding(testText)
+    const embedding = await createEmbedding("This is a test query for OpenAI diagnostics")
+
+    const endTime = Date.now()
 
     return {
       status: "success",
-      latency: Date.now() - startTime,
-      model: EMBEDDING_MODEL,
+      latency: endTime - startTime,
+      model: "text-embedding-3-large",
       dimensions: embedding.length,
-      expectedDimensions: EMBEDDING_DIMENSIONS,
-      dimensionsMatch: embedding.length === EMBEDDING_DIMENSIONS,
+      apiKeySet: !!process.env.OPENAI_API_KEY,
     }
-  } catch (error) {
-    console.error("OpenAI test error:", error)
+  } catch (e: any) {
+    console.error("OpenAI test error:", e)
     return {
       status: "error",
-      message: error instanceof Error ? error.message : "Unknown error",
-      latency: Date.now() - startTime,
+      message: e.message || "An error occurred",
+      stack: e.stack,
     }
   }
 }
@@ -176,56 +132,59 @@ async function testKV() {
   const startTime = Date.now()
 
   try {
-    if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
-      return {
-        status: "error",
-        message: "KV environment variables not set",
-        latency: Date.now() - startTime,
-      }
-    }
+    validateEnv(["VERCEL_KV"])
 
     // Test KV operations
     const testKey = `debug-test-${Date.now()}`
     const testValue = { timestamp: Date.now(), test: true }
 
-    // Test set
+    // Set
     await kv.set(testKey, testValue, { ex: 60 }) // 60 second expiry
 
-    // Test get
+    // Get
     const retrievedValue = await kv.get(testKey)
 
-    // Test delete
+    // Delete
     await kv.del(testKey)
 
-    // Verify deletion
-    const afterDelete = await kv.get(testKey)
+    const endTime = Date.now()
 
     return {
       status: "success",
-      latency: Date.now() - startTime,
+      latency: endTime - startTime,
       operations: {
         set: { status: "success" },
         get: {
           status: "success",
-          valueMatch: JSON.stringify(retrievedValue) === JSON.stringify(testValue),
+          match: JSON.stringify(retrievedValue) === JSON.stringify(testValue),
         },
-        delete: {
-          status: "success",
-          deleted: afterDelete === null,
-        },
+        delete: { status: "success" },
       },
     }
-  } catch (error) {
-    console.error("KV test error:", error)
+  } catch (e: any) {
+    console.error("KV test error:", e)
     return {
       status: "error",
-      message: error instanceof Error ? error.message : "Unknown error",
-      latency: Date.now() - startTime,
+      message: e.message || "An error occurred",
+      stack: e.stack,
     }
   }
 }
 
-function sanitizeHost(host = ""): string {
-  // Remove any protocol prefix (http:// or https://)
-  return host.replace(/^(https?:\/\/)/, "")
+export async function GET() {
+  const timestamp = new Date().toISOString()
+  const environment = process.env.VERCEL_ENV || process.env.NODE_ENV || "development"
+
+  const tests = {
+    pinecone: await testPinecone(),
+    openai: await testOpenAI(),
+    kv: await testKV(),
+  }
+
+  return NextResponse.json({
+    timestamp,
+    environment,
+    runtime: "edge",
+    tests,
+  })
 }

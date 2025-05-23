@@ -4,8 +4,8 @@
  * - Renders the chat window component
  * Runtime context: Server Component
  */
-import { ChatWindow } from "@/app/components/chat/chat-window"
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { ChatWindow } from "../components/chat/chat-window"
+import { Card, CardDescription, CardHeader, CardTitle } from "../../components/ui/card"
 
 export default function DashboardPage() {
   return (

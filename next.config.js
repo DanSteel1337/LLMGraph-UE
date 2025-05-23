@@ -11,6 +11,7 @@ const nextConfig = {
     serverActions: {
       enabled: true,
     },
+    serverComponentsExternalPackages: ["sharp"],
   },
   eslint: {
     ignoreDuringBuilds: true,

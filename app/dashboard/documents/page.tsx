@@ -1,3 +1,4 @@
+import { CardFooter } from "@/components/ui/card"
 /**
  * Purpose: Document management page
  * Logic:
@@ -7,25 +8,47 @@
  * Runtime context: Server Component
  * Services: Vercel Blob (for document list), Vercel KV (for processing status)
  */
-import { DocumentList } from "@/app/components/documents/document-list"
-import { UploadForm } from "@/app/components/documents/upload-form"
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getDocuments } from "@/lib/documents/storage"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle } from "lucide-react"
+import { Suspense } from "react"
+import { DocumentList } from "../../components/documents/document-list"
+import { UploadForm } from "../../components/documents/upload-form"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs"
+import { getDocuments } from "../../../lib/documents/storage"
+import { Skeleton } from "../../../components/ui/skeleton"
+
+// Loading component for documents
+function DocumentsLoading() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {Array(3)
+        .fill(0)
+        .map((_, i) => (
+          <Card key={i}>
+            <CardHeader className="pb-2">
+              <Skeleton className="h-6 w-3/4" />
+              <Skeleton className="h-4 w-1/2 mt-2" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4 mt-2" />
+            </CardContent>
+            <CardFooter className="flex justify-between pt-2">
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-9 w-24" />
+            </CardFooter>
+          </Card>
+        ))}
+    </div>
+  )
+}
+
+// Documents list with data
+async function DocumentsList() {
+  const documents = await getDocuments()
+  return <DocumentList documents={documents} />
+}
 
 export default async function DocumentsPage() {
-  let documents = []
-  let error = null
-
-  try {
-    documents = await getDocuments()
-  } catch (err) {
-    console.error("Failed to fetch documents:", err)
-    error = "Failed to load documents. Please try refreshing the page."
-  }
-
   return (
     <div className="space-y-4">
       <Card className="border-none shadow-none">
@@ -35,21 +58,15 @@ export default async function DocumentsPage() {
         </CardHeader>
       </Card>
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
       <Tabs defaultValue="documents">
         <TabsList>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="upload">Upload</TabsTrigger>
         </TabsList>
         <TabsContent value="documents" className="mt-4">
-          <DocumentList documents={documents} />
+          <Suspense fallback={<DocumentsLoading />}>
+            <DocumentsList />
+          </Suspense>
         </TabsContent>
         <TabsContent value="upload" className="mt-4">
           <UploadForm />
