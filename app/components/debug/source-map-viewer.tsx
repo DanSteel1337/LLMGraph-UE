@@ -9,7 +9,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ChevronDown, ChevronRight, Copy, Eye, EyeOff, AlertCircle, Code, MapPin } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { parseStackTrace, type ParsedError } from "@/lib/utils/edge-error-parser"
+import { parseStackTrace, type ParsedError } from "@/lib/utils"
 
 interface SourceMapViewerProps {
   error: ParsedError
@@ -337,5 +337,8 @@ export function SourceMapViewer({ error, showSourceMaps = false, className }: So
     </Card>
   )
 }
+
+// Named export for backward compatibility
+export { SourceMapViewer as DebugPanel }
 
 export default SourceMapViewer

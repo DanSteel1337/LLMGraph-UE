@@ -12,16 +12,11 @@
  */
 
 import { NextRequest, NextResponse } from "next/server"
-import {
-  parseError,
-  extractRequestContext,
-  formatErrorForLogging,
-  generateRequestId,
-  type ErrorContext,
-} from "@/lib/utils/edge-error-parser"
+import { parseError, formatErrorForLogging, generateRequestId, type ErrorContext } from "@/lib/utils"
+import { extractRequestContext } from "@/lib/utils"
 
 // Re-export these functions for backward compatibility
-export { parseError, formatErrorForLogging } from "@/lib/utils/edge-error-parser"
+export { parseError, formatErrorForLogging } from "@/lib/utils"
 
 export interface ErrorTrackingOptions {
   includeHeaders?: boolean

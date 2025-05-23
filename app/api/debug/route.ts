@@ -15,13 +15,12 @@
  */
 
 import { type NextRequest, NextResponse } from "next/server"
-import { validateEnv } from "../../../lib/utils/env"
-import { createClient } from "../../../lib/pinecone/client"
-import { createEmbedding, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL } from "../../../lib/ai/embeddings"
+import { validateEnv, parseError, formatErrorForLogging, generateRequestId } from "@/lib/utils"
+import { createClient } from "@/lib/pinecone/client"
+import { createEmbedding, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL } from "@/lib/ai/embeddings"
 import { kv } from "@vercel/kv"
-import { createEdgeClient } from "../../../lib/supabase-server"
-import { parseError, formatErrorForLogging, generateRequestId } from "../../../lib/utils/edge-error-parser"
-import { retry } from "../../../lib/utils/retry"
+import { createEdgeClient } from "@/lib/supabase-server"
+import { retry } from "@/lib/utils"
 
 export const runtime = "edge"
 

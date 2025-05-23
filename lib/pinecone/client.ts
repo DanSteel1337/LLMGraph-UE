@@ -8,9 +8,8 @@
  * Runtime context: Edge Function
  */
 import { PineconeRestClient } from "./rest-client"
-import { validateEnv } from "../utils/env"
-import { parseError, formatErrorForLogging, generateRequestId, withErrorBoundary } from "../utils/edge-error-parser"
-import { retryWithExponentialBackoff } from "../utils/retry"
+import { validateEnv, parseError, formatErrorForLogging, generateRequestId } from "../utils"
+import { withErrorTracking } from "../middleware/error-tracking"
 
 // Re-export types
 export type {
@@ -25,108 +24,14 @@ export type {
   PineconeIndexStats,
 } from "./rest-client"
 
-let pineconeClient: EnhancedPineconeClient | null = null
-
-// Enhanced client with error tracking
-class EnhancedPineconeClient {
-  private client: PineconeRestClient
-  private requestId: string
-
-  constructor(client: PineconeRestClient, requestId: string) {
-    this.client = client
-    this.requestId = requestId
-  }
-
-  async query(params: any) {
-    return withErrorBoundary(
-      async () => {
-        return await retryWithExponentialBackoff(() => this.client.query(params), {
-          maxRetries: 3,
-          initialDelay: 300,
-          maxDelay: 3000,
-        })
-      },
-      {
-        requestId: this.requestId,
-        service: "pinecone",
-        operation: "query",
-        context: {
-          namespace: params.namespace,
-          topK: params.topK,
-          includeMetadata: params.includeMetadata,
-        },
-      },
-    )()
-  }
-
-  async upsert(params: any) {
-    return withErrorBoundary(
-      async () => {
-        return await retryWithExponentialBackoff(() => this.client.upsert(params), {
-          maxRetries: 3,
-          initialDelay: 300,
-          maxDelay: 3000,
-        })
-      },
-      {
-        requestId: this.requestId,
-        service: "pinecone",
-        operation: "upsert",
-        context: {
-          namespace: params.namespace,
-          vectorCount: params.vectors?.length,
-        },
-      },
-    )()
-  }
-
-  async delete(params: any) {
-    return withErrorBoundary(
-      async () => {
-        return await retryWithExponentialBackoff(() => this.client.delete(params), {
-          maxRetries: 3,
-          initialDelay: 300,
-          maxDelay: 3000,
-        })
-      },
-      {
-        requestId: this.requestId,
-        service: "pinecone",
-        operation: "delete",
-        context: {
-          namespace: params.namespace,
-          deleteAll: params.deleteAll,
-          ids: params.ids?.length,
-          filter: !!params.filter,
-        },
-      },
-    )()
-  }
-
-  async describeIndexStats() {
-    return withErrorBoundary(
-      async () => {
-        return await retryWithExponentialBackoff(() => this.client.describeIndexStats(), {
-          maxRetries: 3,
-          initialDelay: 300,
-          maxDelay: 3000,
-        })
-      },
-      {
-        requestId: this.requestId,
-        service: "pinecone",
-        operation: "describeIndexStats",
-      },
-    )()
-  }
-}
+let pineconeClient: PineconeRestClient | null = null
 
 function sanitizeHost(host: string): string {
   // Remove any protocol prefix (http:// or https://)
   return host.replace(/^(https?:\/\/)/, "")
 }
 
-export function createClient(requestId?: string): EnhancedPineconeClient {
+export function createClient(requestId?: string): PineconeRestClient {
   const currentRequestId = requestId || generateRequestId()
 
   try {
@@ -151,19 +56,46 @@ export function createClient(requestId?: string): EnhancedPineconeClient {
     )
 
     if (!pineconeClient) {
-      const baseClient = new PineconeRestClient({
+      const client = new PineconeRestClient({
         apiKey: process.env.PINECONE_API_KEY!,
         indexName: process.env.PINECONE_INDEX_NAME!,
         host: host,
       })
 
-      pineconeClient = new EnhancedPineconeClient(baseClient, currentRequestId)
+      // Wrap client methods with error tracking
+      const originalQuery = client.query.bind(client)
+      client.query = withErrorTracking(originalQuery, {
+        requestId: currentRequestId,
+        service: "pinecone",
+        operation: "query",
+      })
+
+      const originalUpsert = client.upsert.bind(client)
+      client.upsert = withErrorTracking(originalUpsert, {
+        requestId: currentRequestId,
+        service: "pinecone",
+        operation: "upsert",
+      })
+
+      const originalDelete = client.delete.bind(client)
+      client.delete = withErrorTracking(originalDelete, {
+        requestId: currentRequestId,
+        service: "pinecone",
+        operation: "delete",
+      })
+
+      pineconeClient = client
     }
 
     return pineconeClient
   } catch (error) {
     // Enhanced error logging for Pinecone client creation
     const parsedError = parseError(error instanceof Error ? error : new Error(String(error)), {
+      requestId: currentRequestId,
+      timestamp: new Date().toISOString(),
+    })
+
+    const logEntry = formatErrorForLogging(parsedError, {
       requestId: currentRequestId,
       timestamp: new Date().toISOString(),
       service: "pinecone",
@@ -174,8 +106,6 @@ export function createClient(requestId?: string): EnhancedPineconeClient {
         apiKeySet: !!process.env.PINECONE_API_KEY,
       },
     })
-
-    const logEntry = formatErrorForLogging(parsedError)
 
     console.error("Pinecone client creation failed:", JSON.stringify(logEntry, null, 2))
     throw error

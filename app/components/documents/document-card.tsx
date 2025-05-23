@@ -1,10 +1,17 @@
 /**
- * Purpose: Document card component with enhanced processing status display
- * Logic:
- * - Displays document information
- * - Shows detailed processing status and progress
- * - Provides delete functionality
- * Runtime context: Client Component
+ * Document Card Component
+ * 
+ * Purpose: Display individual document information with processing status
+ * 
+ * Features:
+ * - Shows document metadata (name, size, upload date)
+ * - Displays processing status with progress indicators
+ * - Provides delete functionality with confirmation
+ * - Shows processing time and chunk/vector counts
+ * - Enhanced error display with tooltips
+ * 
+ * Used in: Document list view
+ * Services: Interacts with /api/documents for deletion
  */
 "use client"
 

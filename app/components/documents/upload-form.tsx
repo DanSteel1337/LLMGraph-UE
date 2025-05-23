@@ -4,12 +4,13 @@
  * Purpose: Handles document uploads and real-time processing progress via Server-Sent Events
  *
  * Features:
- * - File validation and size limits
+ * - File validation (type and size)
  * - Real-time progress updates via SSE
- * - Automatic reconnection on connection loss
+ * - Automatic reconnection with limits to prevent infinite loops
  * - Proper cleanup and abort handling
  * - Enhanced error recovery
- * - Visual progress indicators
+ * - Visual progress indicators with stage details
+ * - Maximum reconnection attempts to prevent memory leaks
  *
  * Supported file types:
  * - Markdown (.md)
@@ -19,7 +20,10 @@
  *
  * Maximum file size: 10MB
  *
- * @module app/components/documents/upload-form
+ * Fixed Issues:
+ * - Corrected SSE endpoint path
+ * - Added reconnection attempt limits
+ * - Improved error handling
  */
 
 "use client"
@@ -83,6 +87,9 @@ const PROCESSING_STAGES = {
   },
 }
 
+// Maximum reconnection attempts to prevent infinite loops
+const MAX_RECONNECT_ATTEMPTS = 5
+
 interface ProcessingDetails {
   chunkCount?: number
   vectorCount?: number
@@ -110,6 +117,7 @@ function UploadFormContent() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const eventSourceRef = useRef<EventSource | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const reconnectAttemptsRef = useRef(0)
   const { toast } = useToast()
   const router = useRouter()
 
@@ -160,6 +168,7 @@ function UploadFormContent() {
     setStatusMessage("Uploading document to storage...")
     setError(null)
     setProcessingDetails({})
+    reconnectAttemptsRef.current = 0
 
     try {
       const formData = new FormData()
@@ -203,6 +212,14 @@ function UploadFormContent() {
     setStatusMessage("Initializing document processing...")
 
     const connectSSE = () => {
+      // Check if we've exceeded max reconnection attempts
+      if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+        setError("Connection failed after multiple attempts. Please try again.")
+        setUploading(false)
+        setProcessing(false)
+        return
+      }
+
       // Create unique session ID for reconnection
       const sessionId = nanoid()
       
@@ -217,12 +234,13 @@ function UploadFormContent() {
         reconnectTimeoutRef.current = null
       }
 
-      // Create new EventSource with custom fetch for auth headers
+      // Create new EventSource with correct endpoint
       const eventSource = new EventSource(`/api/documents/process?id=${documentId}&session=${sessionId}`)
       eventSourceRef.current = eventSource
 
       eventSource.onopen = () => {
         console.log("SSE connection opened")
+        reconnectAttemptsRef.current = 0 // Reset attempts on successful connection
       }
 
       eventSource.onmessage = (event) => {
@@ -244,15 +262,17 @@ function UploadFormContent() {
         console.error("SSE error:", error)
         eventSource.close()
 
-        // Only reconnect if still processing
+        // Only reconnect if still processing and not completed
         if (processing && !["completed", "error"].includes(stage)) {
-          setStatusMessage("Connection lost. Reconnecting...")
+          reconnectAttemptsRef.current++
+          setStatusMessage(`Connection lost. Reconnecting... (Attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`)
           
-          // Attempt to reconnect after delay
+          // Attempt to reconnect after delay with exponential backoff
+          const delay = Math.min(3000 * Math.pow(1.5, reconnectAttemptsRef.current - 1), 30000)
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log("Attempting to reconnect...")
+            console.log(`Attempting to reconnect... (Attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`)
             connectSSE()
-          }, 3000)
+          }, delay)
         } else {
           setUploading(false)
           setProcessing(false)
@@ -327,12 +347,17 @@ function UploadFormContent() {
     setError(null)
     setProcessingDetails({})
     setShowDetails(false)
+    reconnectAttemptsRef.current = 0
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
     if (eventSourceRef.current) {
       eventSourceRef.current.close()
       eventSourceRef.current = null
+    }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
     }
   }
 

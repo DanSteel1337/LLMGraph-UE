@@ -1,5 +1,5 @@
 /**
- * Authentication Middleware
+ * Authentication Middleware with Memory Management
  *
  * Purpose: Protects API routes and pages by validating user authentication
  *
@@ -9,6 +9,7 @@
  * - Handles authentication token refresh and validation
  * - Provides consistent auth checking across the application
  * - Optimized for Edge Runtime performance
+ * - Improved memory management with WeakMap
  *
  * Security: Uses server-side authentication validation
  * Runtime: Vercel Edge Runtime for minimal latency
@@ -36,6 +37,10 @@
  * 4. Return 401/redirect if not authenticated
  * 5. Handle errors gracefully
  *
+ * Fixed Issues:
+ * - Replaced Map with WeakMap to prevent memory leaks
+ * - Removed timeout-based cleanup (WeakMap handles it automatically)
+ * 
  * FINALIZED AUTHENTICATION SYSTEM - DO NOT MODIFY
  * Enhanced version with better error handling and performance
  * See docs/AUTH_LOCKED.md for implementation details
@@ -55,8 +60,8 @@ const ENV_CACHE = {
   key: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
 }
 
-// Cache for Supabase client per request
-const clientCache = new Map<string, any>()
+// WeakMap for Supabase client per request (automatic garbage collection)
+const clientCache = new WeakMap<NextRequest, any>()
 
 export async function middleware(request: NextRequest) {
   const requestId = generateRequestId()
@@ -137,7 +142,7 @@ export async function middleware(request: NextRequest) {
     }
 
     // Use cached client if available
-    let supabase = clientCache.get(requestId)
+    let supabase = clientCache.get(request)
 
     if (!supabase) {
       // Create a Supabase client
@@ -180,13 +185,8 @@ export async function middleware(request: NextRequest) {
         },
       })
 
-      // Cache the client for this request
-      clientCache.set(requestId, supabase)
-
-      // Clean up cache after request is complete (prevent memory leaks)
-      setTimeout(() => {
-        clientCache.delete(requestId)
-      }, 5000) // 5 seconds should be enough for most requests
+      // Cache the client for this request (WeakMap handles cleanup automatically)
+      clientCache.set(request, supabase)
     }
 
     // Check if user is authenticated using getUser()

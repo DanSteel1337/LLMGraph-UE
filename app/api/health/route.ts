@@ -18,7 +18,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "../../../lib/pinecone/client"
 import { kv } from "@vercel/kv"
 import { createEdgeClient } from "../../../lib/supabase-server"
-import { parseError, formatErrorForLogging, generateRequestId } from "../../../lib/utils/edge-error-parser"
+import { parseError, formatErrorForLogging, generateRequestId } from "../../../lib/utils"
 
 export const runtime = "edge"
 
