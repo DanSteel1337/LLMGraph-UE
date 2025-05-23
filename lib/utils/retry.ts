@@ -14,13 +14,15 @@
 import { parseError, formatErrorForLogging, generateRequestId } from "./edge-error-parser"
 
 export interface RetryOptions {
-  maxRetries: number
-  initialDelay: number
-  maxDelay: number
+  maxRetries?: number
+  initialDelay?: number
+  maxDelay?: number
   factor?: number
   jitter?: boolean
   retryableErrors?: Array<string | RegExp>
   onRetry?: (error: Error, attempt: number, delay: number) => void
+  requestId?: string
+  context?: Record<string, unknown>
 }
 
 const DEFAULT_OPTIONS: RetryOptions = {
@@ -41,7 +43,7 @@ export async function retryWithExponentialBackoff<T>(
   context: Record<string, unknown> = {},
 ): Promise<T> {
   const opts = { ...DEFAULT_OPTIONS, ...options }
-  const requestId = context.requestId || generateRequestId()
+  const requestId = context.requestId || options.requestId || generateRequestId()
 
   let attempt = 0
 
@@ -63,7 +65,7 @@ export async function retryWithExponentialBackoff<T>(
       })
 
       // Check if we've exceeded max retries
-      if (attempt >= opts.maxRetries) {
+      if (attempt >= opts.maxRetries!) {
         // Log final failure
         const logEntry = formatErrorForLogging(parsedError, {
           context: {
@@ -91,10 +93,10 @@ export async function retryWithExponentialBackoff<T>(
       }
 
       // Calculate delay with exponential backoff
-      let delay = opts.initialDelay * Math.pow(opts.factor || 2, attempt - 1)
+      let delay = opts.initialDelay! * Math.pow(opts.factor || 2, attempt - 1)
 
       // Apply maximum delay
-      delay = Math.min(delay, opts.maxDelay)
+      delay = Math.min(delay, opts.maxDelay!)
 
       // Add jitter if enabled
       if (opts.jitter) {
@@ -162,22 +164,22 @@ export const COMMON_RETRYABLE_ERRORS = [
  * Specialized retry function for Pinecone API operations with enhanced error tracking
  */
 export async function retryPineconeOperation<T>(operation: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
-  const {
-    maxRetries = 3,
-    initialDelay = 1000,
-    maxDelay = 10000,
-    factor = 2,
-    jitter = true,
-    retryableErrors = COMMON_RETRYABLE_ERRORS,
-    onRetry,
-    requestId,
-    context,
-  } = options
+  const defaultOptions = {
+    maxRetries: 3,
+    initialDelay: 1000,
+    maxDelay: 10000,
+    factor: 2,
+    jitter: true,
+    retryableErrors: COMMON_RETRYABLE_ERRORS,
+  }
+
+  const opts = { ...defaultOptions, ...options }
+  const requestId = options.requestId || generateRequestId()
 
   let lastError: Error
   let attempt = 0
 
-  while (true) {
+  while (attempt <= opts.maxRetries!) {
     try {
       return await operation()
     } catch (error) {
@@ -185,35 +187,38 @@ export async function retryPineconeOperation<T>(operation: () => Promise<T>, opt
 
       // Enhanced error logging for Pinecone operations
       const parsedError = parseError(lastError, {
-        requestId: requestId || generateRequestId(),
+        requestId,
         timestamp: new Date().toISOString(),
       })
 
       const logEntry = formatErrorForLogging(parsedError, {
-        requestId: requestId || generateRequestId(),
+        requestId,
         timestamp: new Date().toISOString(),
         service: "pinecone",
         operation: "vector-operation",
         retryAttempt: attempt + 1,
-        maxRetries: maxRetries,
-        ...context,
+        maxRetries: opts.maxRetries,
+        ...opts.context,
       })
 
-      console.error(`Pinecone operation retry ${attempt + 1}/${maxRetries} failed:`, JSON.stringify(logEntry, null, 2))
+      console.error(
+        `Pinecone operation retry ${attempt + 1}/${opts.maxRetries} failed:`,
+        JSON.stringify(logEntry, null, 2),
+      )
 
       // Check if we should retry based on error type
-      const shouldRetry = isRetryableError(lastError, retryableErrors)
+      const shouldRetry = isRetryableError(lastError, opts.retryableErrors!)
 
-      if (!shouldRetry || attempt >= maxRetries) {
+      if (!shouldRetry || attempt >= opts.maxRetries!) {
         // Log final Pinecone failure
         const finalLogEntry = formatErrorForLogging(parsedError, {
-          requestId: requestId || generateRequestId(),
+          requestId,
           timestamp: new Date().toISOString(),
           service: "pinecone",
           finalFailure: true,
           shouldRetry,
           totalAttempts: attempt + 1,
-          ...context,
+          ...opts.context,
         })
 
         console.error("Pinecone operation final failure:", JSON.stringify(finalLogEntry, null, 2))
@@ -221,19 +226,19 @@ export async function retryPineconeOperation<T>(operation: () => Promise<T>, opt
       }
 
       // Calculate backoff time
-      let delay = initialDelay * Math.pow(factor || 2, attempt - 1)
+      let delay = opts.initialDelay! * Math.pow(opts.factor!, attempt)
 
       // Apply maximum delay
-      delay = Math.min(delay, maxDelay)
+      delay = Math.min(delay, opts.maxDelay!)
 
       // Add jitter if enabled
-      if (jitter) {
+      if (opts.jitter) {
         delay = delay * (0.5 + Math.random() * 0.5)
       }
 
       // Call onRetry callback if provided
-      if (onRetry) {
-        onRetry(lastError, attempt, delay)
+      if (opts.onRetry) {
+        opts.onRetry(lastError, attempt, delay)
       }
 
       // Wait before retrying
@@ -242,4 +247,14 @@ export async function retryPineconeOperation<T>(operation: () => Promise<T>, opt
       attempt++
     }
   }
+
+  throw lastError!
+}
+
+/**
+ * Legacy retry function for backward compatibility
+ * This maintains compatibility with existing code that uses the 'retry' function
+ */
+export async function retry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
+  return retryWithExponentialBackoff(fn, options)
 }

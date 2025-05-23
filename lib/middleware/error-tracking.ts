@@ -20,6 +20,9 @@ import {
   type ErrorContext,
 } from "@/lib/utils/edge-error-parser"
 
+// Re-export these functions for backward compatibility
+export { parseError, formatErrorForLogging } from "@/lib/utils/edge-error-parser"
+
 export interface ErrorTrackingOptions {
   includeHeaders?: boolean
   includeBody?: boolean
