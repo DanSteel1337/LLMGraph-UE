@@ -8,8 +8,8 @@
  * Runtime context: Edge Function
  */
 import { PineconeRestClient } from "./rest-client"
-import { validateEnv, parseError, formatErrorForLogging, generateRequestId } from "../utils"
-import { withErrorTracking } from "../middleware/error-tracking"
+import { validateEnv, parseError, formatErrorForLogging, generateRequestId } from "@/lib/utils"
+import { withErrorTracking } from "@/lib/middleware/error-tracking"
 
 // Re-export types
 export type {

@@ -14,36 +14,56 @@
 import { parseError, formatErrorForLogging, generateRequestId } from "./edge-error-parser"
 
 export interface RetryOptions {
-  maxRetries?: number
+  retries?: number
   initialDelay?: number
   maxDelay?: number
   factor?: number
   jitter?: boolean
-  retryableErrors?: Array<string | RegExp>
-  onRetry?: (error: Error, attempt: number, delay: number) => void
+  onRetry?: (error: Error, attempt: number) => void
+  shouldRetry?: (error: Error) => boolean
   requestId?: string
-  context?: Record<string, unknown>
+  context?: Record<string, any>
 }
 
-const DEFAULT_OPTIONS: RetryOptions = {
-  maxRetries: 3,
+const defaultOptions: RetryOptions = {
+  retries: 3,
   initialDelay: 100,
-  maxDelay: 3000,
+  maxDelay: 5000,
   factor: 2,
   jitter: true,
+  shouldRetry: () => true,
+}
+
+/**
+ * Calculate delay with exponential backoff and optional jitter
+ */
+function calculateDelay(attempt: number, options: Required<RetryOptions>): number {
+  const delay = Math.min(options.maxDelay, options.initialDelay * Math.pow(options.factor, attempt))
+
+  if (options.jitter) {
+    // Add random jitter between 0-30%
+    return delay * (0.7 + Math.random() * 0.3)
+  }
+
+  return delay
+}
+
+/**
+ * Sleep for a specified duration
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**
  * Retry a function with exponential backoff
- * Edge Runtime compatible
+ * @param fn Function to retry
+ * @param options Retry options
+ * @returns Promise with the function result
  */
-export async function retryWithExponentialBackoff<T>(
-  fn: () => Promise<T>,
-  options: Partial<RetryOptions> = {},
-  context: Record<string, unknown> = {},
-): Promise<T> {
-  const opts = { ...DEFAULT_OPTIONS, ...options }
-  const requestId = context.requestId || options.requestId || generateRequestId()
+export async function retry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
+  const opts = { ...defaultOptions, ...options } as Required<RetryOptions>
+  const requestId = opts.requestId || generateRequestId()
 
   let attempt = 0
 
@@ -53,86 +73,153 @@ export async function retryWithExponentialBackoff<T>(
     } catch (error) {
       attempt++
 
-      // Enhanced error logging for retries
-      const parsedError = parseError(error instanceof Error ? error : new Error(String(error)), {
-        requestId: requestId as string,
-        timestamp: new Date().toISOString(),
-        context: {
-          ...context,
-          retryAttempt: attempt,
-          maxRetries: opts.maxRetries,
-        },
-      })
+      const isRetryable = error instanceof Error && opts.shouldRetry(error)
+      const hasAttemptsLeft = attempt < opts.retries
 
-      // Check if we've exceeded max retries
-      if (attempt >= opts.maxRetries!) {
-        // Log final failure
-        const logEntry = formatErrorForLogging(parsedError, {
+      if (!isRetryable || !hasAttemptsLeft) {
+        // Log the final error with context
+        const parsedError = parseError(error instanceof Error ? error : new Error(String(error)), {
+          requestId,
+          timestamp: new Date().toISOString(),
           context: {
-            finalRetryFailure: true,
-            totalAttempts: attempt,
+            ...opts.context,
+            retryAttempts: attempt,
           },
+        })
+
+        const logEntry = formatErrorForLogging(parsedError, {
+          operation: "retry-final-failure",
+          attempts: attempt,
+          ...opts.context,
         })
 
         console.error(`Retry failed after ${attempt} attempts:`, JSON.stringify(logEntry, null, 2))
+
         throw error
       }
 
-      // Check if error is retryable
-      if (opts.retryableErrors && !isRetryableError(error, opts.retryableErrors)) {
-        // Log non-retryable error
-        const logEntry = formatErrorForLogging(parsedError, {
-          context: {
-            retryable: false,
-            reason: "non-retryable-error",
-          },
-        })
-
-        console.error("Non-retryable error:", JSON.stringify(logEntry, null, 2))
-        throw error
-      }
-
-      // Calculate delay with exponential backoff
-      let delay = opts.initialDelay! * Math.pow(opts.factor || 2, attempt - 1)
-
-      // Apply maximum delay
-      delay = Math.min(delay, opts.maxDelay!)
-
-      // Add jitter if enabled
-      if (opts.jitter) {
-        delay = delay * (0.5 + Math.random() * 0.5)
-      }
+      // Calculate delay for next retry
+      const delay = calculateDelay(attempt, opts)
 
       // Log retry attempt
-      console.warn(`Retry attempt ${attempt}/${opts.maxRetries} after ${Math.round(delay)}ms:`, {
-        error: parsedError.message,
-        requestId,
-        timestamp: new Date().toISOString(),
-      })
-
-      // Call onRetry callback if provided
       if (opts.onRetry) {
-        opts.onRetry(error instanceof Error ? error : new Error(String(error)), attempt, delay)
+        opts.onRetry(error instanceof Error ? error : new Error(String(error)), attempt)
+      } else {
+        console.warn(`Retry attempt ${attempt}/${opts.retries} after ${delay}ms:`, {
+          error: error instanceof Error ? error.message : String(error),
+          requestId,
+          ...opts.context,
+        })
       }
 
-      // Wait before retrying
-      await new Promise((resolve) => setTimeout(resolve, delay))
+      // Wait before next attempt
+      await sleep(delay)
     }
   }
 }
 
 /**
- * Check if an error is retryable based on patterns
+ * Create a retryable version of a function
+ * @param fn Function to make retryable
+ * @param options Retry options
+ * @returns Retryable function
  */
-function isRetryableError(error: unknown, patterns: Array<string | RegExp>): boolean {
-  const errorMessage = error instanceof Error ? error.message : String(error)
+export function retryable<T extends (...args: any[]) => Promise<any>>(
+  fn: T,
+  options: RetryOptions = {},
+): (...args: Parameters<T>) => Promise<ReturnType<T>> {
+  return (...args: Parameters<T>): Promise<ReturnType<T>> => {
+    return retry(() => fn(...args), options)
+  }
+}
 
-  return patterns.some((pattern) => {
-    if (typeof pattern === "string") {
-      return errorMessage.includes(pattern)
+/**
+ * Specialized retry function for Pinecone API operations with enhanced error tracking
+ */
+export async function retryPineconeOperation<T>(operation: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
+  const defaultOptions = {
+    retries: 3,
+    initialDelay: 1000,
+    maxDelay: 10000,
+    factor: 2,
+    jitter: true,
+    shouldRetry: (error: Error) =>
+      COMMON_RETRYABLE_ERRORS.some((pattern) => {
+        if (typeof pattern === "string") {
+          return error.message.includes(pattern)
+        }
+        return pattern.test(error.message)
+      }),
+  }
+
+  const opts = { ...defaultOptions, ...options } as Required<RetryOptions>
+  const requestId = options.requestId || generateRequestId()
+
+  let lastError: Error
+  let attempt = 0
+
+  while (attempt <= opts.retries) {
+    try {
+      return await operation()
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+
+      // Enhanced error logging for Pinecone operations
+      const parsedError = parseError(lastError, {
+        requestId,
+        timestamp: new Date().toISOString(),
+      })
+
+      const logEntry = formatErrorForLogging(parsedError, {
+        requestId,
+        timestamp: new Date().toISOString(),
+        service: "pinecone",
+        operation: "vector-operation",
+        retryAttempt: attempt + 1,
+        maxRetries: opts.retries,
+        ...opts.context,
+      })
+
+      console.error(
+        `Pinecone operation retry ${attempt + 1}/${opts.retries} failed:`,
+        JSON.stringify(logEntry, null, 2),
+      )
+
+      // Check if we should retry based on error type
+      const shouldRetry = opts.shouldRetry(lastError)
+
+      if (!shouldRetry || attempt >= opts.retries) {
+        // Log final Pinecone failure
+        const finalLogEntry = formatErrorForLogging(parsedError, {
+          requestId,
+          timestamp: new Date().toISOString(),
+          service: "pinecone",
+          finalFailure: true,
+          shouldRetry,
+          totalAttempts: attempt + 1,
+          ...opts.context,
+        })
+
+        console.error("Pinecone operation final failure:", JSON.stringify(finalLogEntry, null, 2))
+        throw lastError
+      }
+
+      // Calculate backoff time
+      const delay = calculateDelay(attempt, opts)
+
+      // Call onRetry callback if provided
+      if (opts.onRetry) {
+        opts.onRetry(lastError, attempt)
+      }
+
+      // Wait before retrying
+      await sleep(delay)
+
+      attempt++
     }
-    return pattern.test(errorMessage)
-  })
+  }
+
+  throw new Error("Unexpected state: retryPineconeOperation should have thrown an error before reaching here.")
 }
 
 /**
@@ -159,102 +246,3 @@ export const COMMON_RETRYABLE_ERRORS = [
   "internal server error",
   "temporarily unavailable",
 ]
-
-/**
- * Specialized retry function for Pinecone API operations with enhanced error tracking
- */
-export async function retryPineconeOperation<T>(operation: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
-  const defaultOptions = {
-    maxRetries: 3,
-    initialDelay: 1000,
-    maxDelay: 10000,
-    factor: 2,
-    jitter: true,
-    retryableErrors: COMMON_RETRYABLE_ERRORS,
-  }
-
-  const opts = { ...defaultOptions, ...options }
-  const requestId = options.requestId || generateRequestId()
-
-  let lastError: Error
-  let attempt = 0
-
-  while (attempt <= opts.maxRetries!) {
-    try {
-      return await operation()
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error))
-
-      // Enhanced error logging for Pinecone operations
-      const parsedError = parseError(lastError, {
-        requestId,
-        timestamp: new Date().toISOString(),
-      })
-
-      const logEntry = formatErrorForLogging(parsedError, {
-        requestId,
-        timestamp: new Date().toISOString(),
-        service: "pinecone",
-        operation: "vector-operation",
-        retryAttempt: attempt + 1,
-        maxRetries: opts.maxRetries,
-        ...opts.context,
-      })
-
-      console.error(
-        `Pinecone operation retry ${attempt + 1}/${opts.maxRetries} failed:`,
-        JSON.stringify(logEntry, null, 2),
-      )
-
-      // Check if we should retry based on error type
-      const shouldRetry = isRetryableError(lastError, opts.retryableErrors!)
-
-      if (!shouldRetry || attempt >= opts.maxRetries!) {
-        // Log final Pinecone failure
-        const finalLogEntry = formatErrorForLogging(parsedError, {
-          requestId,
-          timestamp: new Date().toISOString(),
-          service: "pinecone",
-          finalFailure: true,
-          shouldRetry,
-          totalAttempts: attempt + 1,
-          ...opts.context,
-        })
-
-        console.error("Pinecone operation final failure:", JSON.stringify(finalLogEntry, null, 2))
-        throw lastError
-      }
-
-      // Calculate backoff time
-      let delay = opts.initialDelay! * Math.pow(opts.factor!, attempt)
-
-      // Apply maximum delay
-      delay = Math.min(delay, opts.maxDelay!)
-
-      // Add jitter if enabled
-      if (opts.jitter) {
-        delay = delay * (0.5 + Math.random() * 0.5)
-      }
-
-      // Call onRetry callback if provided
-      if (opts.onRetry) {
-        opts.onRetry(lastError, attempt, delay)
-      }
-
-      // Wait before retrying
-      await new Promise((resolve) => setTimeout(resolve, delay))
-
-      attempt++
-    }
-  }
-
-  throw lastError!
-}
-
-/**
- * Legacy retry function for backward compatibility
- * This maintains compatibility with existing code that uses the 'retry' function
- */
-export async function retry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
-  return retryWithExponentialBackoff(fn, options)
-}
