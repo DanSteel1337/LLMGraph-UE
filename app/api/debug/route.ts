@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
     console.log("Testing Pinecone...", { requestId })
     const pineconeStartTime = Date.now()
     try {
+      // Use our custom REST client instead of the official SDK
       const pineconeClient = createClient(requestId)
 
       // Test 1: Get index stats
@@ -199,6 +200,11 @@ export async function GET(request: NextRequest) {
         latency: pineconeLatency,
         error: parsedError.message,
         details: parsedError,
+        config: {
+          host: process.env.PINECONE_HOST,
+          indexName: process.env.PINECONE_INDEX_NAME,
+          apiKeySet: !!process.env.PINECONE_API_KEY,
+        },
       }
     }
 
