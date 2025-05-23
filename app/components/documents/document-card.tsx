@@ -12,7 +12,7 @@ interface DocumentCardProps {
   id: string
   title: string
   description?: string
-  createdAt: Date
+  createdAt: Date | string
   status: "processing" | "indexed" | "error"
   chunks?: number
   onDelete?: (id: string) => void
@@ -69,13 +69,31 @@ export function DocumentCard({
     }
   }
 
+  // Format the date safely
+  const formatDate = (dateValue: Date | string) => {
+    try {
+      // Handle string dates or invalid dates
+      const date = dateValue instanceof Date ? dateValue : new Date(dateValue)
+
+      // Check if date is valid before formatting
+      if (isNaN(date.getTime())) {
+        return "Unknown date"
+      }
+
+      return formatDistanceToNow(date, { addSuffix: true })
+    } catch (error) {
+      console.error("Date formatting error:", error)
+      return "Unknown date"
+    }
+  }
+
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
             <CardTitle className="line-clamp-1">{title}</CardTitle>
-            <CardDescription>Added {formatDistanceToNow(createdAt, { addSuffix: true })}</CardDescription>
+            <CardDescription>Added {formatDate(createdAt)}</CardDescription>
           </div>
           <TooltipProvider>
             <Tooltip>
