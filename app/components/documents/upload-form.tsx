@@ -1,42 +1,3 @@
-/**
- * Document Upload Form with Real-Time Progress Streaming
- *
- * Purpose: Handles file uploads with real-time processing feedback
- *
- * Features:
- * - File selection and validation for supported document types
- * - Real-time upload progress tracking with XMLHttpRequest
- * - Streaming progress updates during document processing
- * - Visual progress indicators with stage-specific styling
- * - Error handling with detailed error messages
- * - Cancellation support for long-running operations
- * - Integration with existing shadcn/ui components and error boundaries
- *
- * Runtime context: Client Component
- * Services: Vercel Blob (via upload API), Document Processing (via streaming API)
- *
- * Supported File Types:
- * - text/markdown (.md) - API documentation in Markdown format
- * - text/plain (.txt) - Plain text documentation
- * - application/pdf (.pdf) - PDF documentation files
- * - text/html (.html) - HTML documentation pages
- *
- * Processing Stages:
- * - uploading: File upload to Vercel Blob storage
- * - processing: Initial processing setup and content fetching
- * - chunking: Semantic text splitting and structure analysis
- * - embedding: Embedding generation with OpenAI text-embedding-3-large
- * - storing: Vector storage in Pinecone with metadata
- * - completed: Processing finished successfully
- * - error: Error occurred during any stage
- *
- * UI Integration:
- * - Uses shadcn/ui components (Card, Button, Progress, Alert)
- * - Follows existing error boundary patterns
- * - Integrates with toast notification system
- * - Responsive design with proper loading states
- */
-
 "use client"
 
 import type React from "react"
@@ -51,6 +12,7 @@ import { Upload, FileText, AlertCircle, X, CheckCircle, Loader2 } from "lucide-r
 import { useRouter } from "next/navigation"
 import { ErrorBoundary, useErrorBoundaryWithToast } from "@/app/components/ui/error-boundary"
 import { cn } from "@/lib/utils"
+import { debug, captureError } from "../../lib/utils/debug"
 
 // Processing stages with enhanced styling aligned with project design
 const PROCESSING_STAGES = {
@@ -131,9 +93,16 @@ function UploadFormContent() {
   const allowedTypes = ["text/markdown", "text/plain", "application/pdf", "text/html"]
   const allowedExtensions = [".md", ".txt", ".pdf", ".html"]
 
-  // Cleanup function for the stream
+  // Log component mount for debugging
   useEffect(() => {
+    debug.log("UploadForm component mounted")
+    debug.log("NEXT_PUBLIC_DEBUG status:", process.env.NEXT_PUBLIC_DEBUG)
+
+    // Force a console log to verify console is working
+    console.log("DIRECT CONSOLE LOG - UploadForm mounted, debug status:", process.env.NEXT_PUBLIC_DEBUG)
+
     return () => {
+      debug.log("UploadForm component unmounted")
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
@@ -145,15 +114,21 @@ function UploadFormContent() {
     setError(null)
 
     if (selectedFile) {
+      debug.log("File selected:", selectedFile.name, selectedFile.type, selectedFile.size)
+
       if (!allowedTypes.includes(selectedFile.type)) {
-        setError("Invalid file type. Supported types: Markdown (.md), Text (.txt), PDF (.pdf), HTML (.html)")
+        const errorMsg = "Invalid file type. Supported types: Markdown (.md), Text (.txt), PDF (.pdf), HTML (.html)"
+        debug.error(errorMsg, selectedFile.type)
+        setError(errorMsg)
         setFile(null)
         return
       }
 
       // Additional file size validation (10MB limit)
       if (selectedFile.size > 10 * 1024 * 1024) {
-        setError("File size too large. Maximum size is 10MB.")
+        const errorMsg = "File size too large. Maximum size is 10MB."
+        debug.error(errorMsg, selectedFile.size)
+        setError(errorMsg)
         setFile(null)
         return
       }
@@ -166,6 +141,10 @@ function UploadFormContent() {
 
   const handleUpload = async () => {
     if (!file) return
+
+    debug.group("Document Upload Process")
+    debug.log("Starting upload for file:", file.name)
+    debug.time("Upload Process")
 
     setUploading(true)
     setProgress(0)
@@ -184,16 +163,19 @@ function UploadFormContent() {
         if (event.lengthComputable) {
           const percentComplete = Math.round((event.loaded / event.total) * 100)
           setProgress(percentComplete)
-          setStatusMessage(
-            `Uploading: ${percentComplete}% (${(event.loaded / 1024 / 1024).toFixed(1)}MB / ${(event.total / 1024 / 1024).toFixed(1)}MB)`,
-          )
+          const statusMsg = `Uploading: ${percentComplete}% (${(event.loaded / 1024 / 1024).toFixed(1)}MB / ${(event.total / 1024 / 1024).toFixed(1)}MB)`
+          setStatusMessage(statusMsg)
+          debug.log("Upload progress:", statusMsg)
         }
       })
 
       xhr.addEventListener("load", async () => {
+        debug.log("XHR load event triggered, status:", xhr.status)
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
+            debug.log("XHR response:", xhr.responseText)
             const response = JSON.parse(xhr.responseText)
+            debug.log("Upload successful, parsed response:", response)
 
             toast({
               title: "Upload successful",
@@ -203,40 +185,75 @@ function UploadFormContent() {
             // Start processing with streaming updates
             await startProcessingWithStream(response.id)
           } catch (jsonError) {
-            console.error("Response parsing error:", xhr.responseText)
+            const errorInfo = captureError(jsonError, "JSON parsing")
+            debug.error("Response parsing error:", xhr.responseText, errorInfo)
+            console.error("Response parsing error:", xhr.responseText, jsonError)
             setError("Upload succeeded but received unexpected response format")
             setUploading(false)
           }
         } else {
+          debug.error("XHR error status:", xhr.status, xhr.statusText)
           handleUploadError(xhr)
         }
       })
 
-      xhr.addEventListener("error", () => {
+      xhr.addEventListener("error", (event) => {
+        debug.error("XHR network error:", event)
+        console.error("XHR network error:", event)
         setError("Network error occurred during upload")
         setUploading(false)
       })
 
       xhr.addEventListener("abort", () => {
+        debug.warn("XHR request aborted")
         setError("Upload was cancelled")
         setUploading(false)
       })
 
+      debug.log("Opening XHR connection to /api/documents/upload")
       xhr.open("POST", "/api/documents/upload")
+
+      // Add event listener for readystatechange to debug XHR states
+      xhr.addEventListener("readystatechange", () => {
+        debug.log("XHR ready state changed:", xhr.readyState)
+        if (xhr.readyState === 4) {
+          debug.log("XHR request completed with status:", xhr.status)
+        }
+      })
+
+      debug.log("Sending XHR request with form data")
       xhr.send(formData)
     } catch (err) {
+      const errorInfo = captureError(err, "Upload handler")
+      debug.error("Upload error:", errorInfo)
+      console.error("Upload error:", err)
       setError(err instanceof Error ? err.message : "An unknown error occurred")
       setUploading(false)
+      debug.timeEnd("Upload Process")
+      debug.groupEnd()
     }
   }
 
   const handleUploadError = (xhr: XMLHttpRequest) => {
+    debug.group("Upload Error Handling")
+    debug.error("XHR error details:", {
+      status: xhr.status,
+      statusText: xhr.statusText,
+      responseText: xhr.responseText,
+      responseType: xhr.responseType,
+      responseURL: xhr.responseURL,
+    })
+
     let errorMessage = "Upload failed"
     try {
+      debug.log("Attempting to parse error response")
       const errorResponse = JSON.parse(xhr.responseText)
-      errorMessage = errorResponse.error || errorMessage
+      debug.log("Parsed error response:", errorResponse)
+      errorMessage = errorResponse.error || errorResponse.message || errorMessage
     } catch (parseError) {
+      debug.error("Failed to parse error response:", parseError)
       if (xhr.responseText.includes("<!DOCTYPE")) {
+        debug.log("Response appears to be HTML, likely a server error page")
         if (xhr.status === 401) {
           errorMessage = "Authentication required. Please log in again."
         } else if (xhr.status >= 500) {
@@ -248,11 +265,18 @@ function UploadFormContent() {
         errorMessage = xhr.responseText || errorMessage
       }
     }
+
+    debug.error("Final error message:", errorMessage)
     setError(errorMessage)
     setUploading(false)
+    debug.groupEnd()
   }
 
   const startProcessingWithStream = async (documentId: string) => {
+    debug.group("Document Processing Stream")
+    debug.log("Starting processing stream for document:", documentId)
+    debug.time("Processing Stream")
+
     setProcessing(true)
     setProgress(0)
     setStage("processing")
@@ -262,6 +286,7 @@ function UploadFormContent() {
     abortControllerRef.current = new AbortController()
 
     try {
+      debug.log("Fetching processing stream from /api/documents/process")
       const response = await fetch(`/api/documents/process?id=${documentId}`, {
         method: "POST",
         headers: {
@@ -269,6 +294,8 @@ function UploadFormContent() {
         },
         signal: abortControllerRef.current.signal,
       })
+
+      debug.log("Processing stream response status:", response.status)
 
       if (!response.ok) {
         throw new Error(`Processing failed with status ${response.status}`)
@@ -279,6 +306,7 @@ function UploadFormContent() {
       }
 
       // Process the stream
+      debug.log("Starting to read processing stream")
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
 
@@ -286,25 +314,34 @@ function UploadFormContent() {
         const { done, value } = await reader.read()
 
         if (done) {
+          debug.log("Processing stream complete")
           break
         }
 
         // Decode the chunk and split by newlines (each line is a JSON object)
         const chunk = decoder.decode(value, { stream: true })
+        debug.log("Received chunk from stream:", chunk.length, "bytes")
         const lines = chunk.split("\n").filter((line) => line.trim())
+        debug.log("Parsed", lines.length, "lines from chunk")
 
         for (const line of lines) {
           try {
             const update = JSON.parse(line)
+            debug.log("Processing update:", update)
             handleProgressUpdate(update)
           } catch (parseError) {
             // Log parsing errors but continue processing
-            console.warn("Failed to parse progress update:", line)
+            debug.error("Failed to parse progress update:", line, parseError)
+            console.warn("Failed to parse progress update:", line, parseError)
           }
         }
       }
     } catch (err: any) {
       if (err.name !== "AbortError") {
+        const errorInfo = captureError(err, "Processing stream")
+        debug.error("Processing stream error:", errorInfo)
+        console.error("Processing stream error:", err)
+
         setError(err instanceof Error ? err.message : "An unknown error occurred during processing")
         setStage("error")
         toast({
@@ -312,39 +349,51 @@ function UploadFormContent() {
           description: err instanceof Error ? err.message : "An unknown error occurred during processing",
           variant: "destructive",
         })
+      } else {
+        debug.log("Processing stream aborted")
       }
     } finally {
+      debug.timeEnd("Processing Stream")
+      debug.groupEnd()
       setUploading(false)
       setProcessing(false)
     }
   }
 
   const handleProgressUpdate = (update: any) => {
+    debug.log("Progress update received:", update)
+
     // Update stage
     if (update.status && PROCESSING_STAGES[update.status as keyof typeof PROCESSING_STAGES]) {
+      debug.log("Updating stage from status:", update.status)
       setStage(update.status as keyof typeof PROCESSING_STAGES)
     }
     if (update.stage && PROCESSING_STAGES[update.stage as keyof typeof PROCESSING_STAGES]) {
+      debug.log("Updating stage:", update.stage)
       setStage(update.stage as keyof typeof PROCESSING_STAGES)
     }
 
     // Update progress
     if (update.progress !== undefined) {
+      debug.log("Updating progress:", update.progress)
       setProgress(update.progress)
     }
 
     // Update status message
     if (update.message) {
+      debug.log("Updating status message:", update.message)
       setStatusMessage(update.message)
     }
 
     // Update processing details
     if (update.details) {
+      debug.log("Updating processing details:", update.details)
       setProcessingDetails((prev) => ({ ...prev, ...update.details }))
     }
 
     // Handle completion
     if (update.status === "processed" || update.stage === "completed") {
+      debug.log("Processing completed")
       setStage("completed")
       setProgress(100)
       toast({
@@ -354,6 +403,7 @@ function UploadFormContent() {
 
       // Reset form after delay
       setTimeout(() => {
+        debug.log("Resetting form after completion")
         resetForm()
         router.refresh()
       }, 3000)
@@ -361,6 +411,7 @@ function UploadFormContent() {
 
     // Handle errors
     if (update.status === "error" || update.stage === "error") {
+      debug.error("Processing error in update:", update)
       setStage("error")
       setError(update.message || "An error occurred during processing")
       setUploading(false)
@@ -369,6 +420,7 @@ function UploadFormContent() {
   }
 
   const resetForm = () => {
+    debug.log("Resetting upload form")
     setFile(null)
     setUploading(false)
     setProcessing(false)
@@ -384,6 +436,7 @@ function UploadFormContent() {
   }
 
   const cancelProcessing = () => {
+    debug.log("Cancelling processing")
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
@@ -561,9 +614,21 @@ function UploadFormContent() {
 export function UploadForm() {
   const { handleError } = useErrorBoundaryWithToast()
 
+  // Log component mount for debugging
+  useEffect(() => {
+    debug.log("UploadForm wrapper mounted")
+
+    // Force a console log to verify console is working
+    console.log("DIRECT CONSOLE LOG - UploadForm wrapper mounted")
+  }, [])
+
   return (
     <ErrorBoundary
-      onError={(error) => handleError(error)}
+      onError={(error) => {
+        debug.error("Error boundary caught error:", error)
+        console.error("Error boundary caught error:", error)
+        handleError(error)
+      }}
       fallback={
         <Card>
           <CardHeader>

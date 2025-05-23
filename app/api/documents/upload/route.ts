@@ -54,28 +54,71 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const ALLOWED_TYPES = ["text/markdown", "text/plain", "application/pdf", "text/html"]
 const ALLOWED_EXTENSIONS = [".md", ".txt", ".pdf", ".html"]
 
+// Simple debug logger for server-side
+const serverDebug = (message: string, ...args: any[]) => {
+  if (process.env.NEXT_PUBLIC_DEBUG === "true") {
+    console.log(`[SERVER DEBUG] ${message}`, ...args)
+  }
+}
+
 export async function POST(request: NextRequest) {
+  serverDebug("Document upload API called")
+
+  // Log request details
+  serverDebug("Request headers:", Object.fromEntries(request.headers.entries()))
+
   // Validate only the environment variables needed for this route
-  validateEnv(["SUPABASE", "VERCEL_BLOB", "VERCEL_KV"])
+  try {
+    validateEnv(["SUPABASE", "VERCEL_BLOB", "VERCEL_KV"])
+    serverDebug("Environment variables validated successfully")
+  } catch (envError) {
+    serverDebug("Environment validation error:", envError)
+    return NextResponse.json(
+      {
+        error: "Configuration Error",
+        message: envError instanceof Error ? envError.message : "Missing required environment variables",
+        debug: process.env.NEXT_PUBLIC_DEBUG === "true" ? { error: String(envError) } : undefined,
+      },
+      { status: 500 },
+    )
+  }
 
   try {
     // Validate authentication using edge client
-    const supabase = createEdgeClient()
+    serverDebug("Creating Supabase edge client")
+    const supabase = createEdgeClient(request)
+
+    serverDebug("Getting authenticated user")
     const { data, error } = await supabase.auth.getUser()
 
     if (error || !data.user) {
-      return NextResponse.json({ error: "Unauthorized", message: "Authentication required" }, { status: 401 })
+      serverDebug("Authentication failed:", error)
+      return NextResponse.json(
+        {
+          error: "Unauthorized",
+          message: "Authentication required",
+          debug: process.env.NEXT_PUBLIC_DEBUG === "true" ? { error: String(error) } : undefined,
+        },
+        { status: 401 },
+      )
     }
 
+    serverDebug("User authenticated successfully:", data.user.id)
+
+    serverDebug("Parsing form data")
     const formData = await request.formData()
     const file = formData.get("file") as File
 
     if (!file) {
+      serverDebug("No file provided in request")
       return NextResponse.json({ error: "Bad Request", message: "No file provided" }, { status: 400 })
     }
 
+    serverDebug("File received:", file.name, file.type, file.size)
+
     // Validate file type
     if (!ALLOWED_TYPES.includes(file.type)) {
+      serverDebug("Invalid file type:", file.type)
       return NextResponse.json(
         { error: "Bad Request", message: "Invalid file type. Supported types: Markdown, Text, PDF, HTML" },
         { status: 400 },
@@ -85,6 +128,7 @@ export async function POST(request: NextRequest) {
     // Validate file extension
     const hasValidExtension = ALLOWED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext))
     if (!hasValidExtension) {
+      serverDebug("Invalid file extension:", file.name)
       return NextResponse.json(
         { error: "Bad Request", message: "Invalid file extension. Supported extensions: .md, .txt, .pdf, .html" },
         { status: 400 },
@@ -93,6 +137,7 @@ export async function POST(request: NextRequest) {
 
     // Validate file size
     if (file.size > MAX_FILE_SIZE) {
+      serverDebug("File too large:", file.size)
       return NextResponse.json(
         { error: "Bad Request", message: `File size too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB` },
         { status: 400 },
@@ -101,38 +146,80 @@ export async function POST(request: NextRequest) {
 
     // Validate file name for security
     const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-_]/g, "_")
+    serverDebug("Sanitized filename:", sanitizedFileName)
+
+    // Generate document ID
+    const documentId = `doc-${Date.now()}`
+    serverDebug("Generated document ID:", documentId)
 
     // Upload to Vercel Blob
-    const documentId = `doc-${Date.now()}`
-    const blob = await put(`documents/${documentId}/${sanitizedFileName}`, file, {
-      access: "private",
-    })
+    serverDebug("Uploading to Vercel Blob")
+    let blob
+    try {
+      blob = await put(`documents/${documentId}/${sanitizedFileName}`, file, {
+        access: "private",
+      })
+      serverDebug("Blob upload successful:", blob.url)
+    } catch (blobError) {
+      serverDebug("Blob upload error:", blobError)
+      return NextResponse.json(
+        {
+          error: "Storage Error",
+          message: "Failed to upload file to storage",
+          debug: process.env.NEXT_PUBLIC_DEBUG === "true" ? { error: String(blobError) } : undefined,
+        },
+        { status: 500 },
+      )
+    }
 
     // Store metadata in KV
-    await kv.set(`document:${documentId}`, {
-      id: documentId,
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      url: blob.url,
-      uploadedAt: new Date().toISOString(),
-      status: "uploaded",
-      userId: data.user.id, // Associate with user
-    })
+    serverDebug("Storing metadata in KV")
+    try {
+      await kv.set(`document:${documentId}`, {
+        id: documentId,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        url: blob.url,
+        uploadedAt: new Date().toISOString(),
+        status: "uploaded",
+        userId: data.user.id, // Associate with user
+      })
+      serverDebug("Metadata stored successfully")
+    } catch (kvError) {
+      serverDebug("KV storage error:", kvError)
+      return NextResponse.json(
+        {
+          error: "Storage Error",
+          message: "Failed to store document metadata",
+          debug: process.env.NEXT_PUBLIC_DEBUG === "true" ? { error: String(kvError) } : undefined,
+        },
+        { status: 500 },
+      )
+    }
 
     // Trigger processing
+    serverDebug("Triggering document processing")
     const processingUrl = new URL("/api/documents/process", request.url)
     processingUrl.searchParams.set("id", documentId)
 
-    fetch(processingUrl.toString(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        // Forward auth cookie for the background request
-        Cookie: request.headers.get("Cookie") || "",
-      },
-    }).catch(console.error) // Non-blocking
+    try {
+      fetch(processingUrl.toString(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // Forward auth cookie for the background request
+          Cookie: request.headers.get("Cookie") || "",
+        },
+      }).catch((error) => {
+        serverDebug("Non-blocking processing trigger error:", error)
+      })
+    } catch (fetchError) {
+      serverDebug("Error triggering processing (non-blocking):", fetchError)
+      // Don't return an error here as this is non-blocking
+    }
 
+    serverDebug("Upload completed successfully, returning response")
     return NextResponse.json({
       id: documentId,
       name: file.name,
@@ -140,11 +227,28 @@ export async function POST(request: NextRequest) {
       status: "uploaded",
     })
   } catch (error) {
-    console.error("Upload error:", error)
+    serverDebug("Unhandled upload error:", error)
+
+    // Ensure error is properly serialized
+    let errorMessage = "Failed to upload document"
+    let errorDetails = undefined
+
+    if (error instanceof Error) {
+      errorMessage = error.message
+      if (process.env.NEXT_PUBLIC_DEBUG === "true") {
+        errorDetails = {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        }
+      }
+    }
+
     return NextResponse.json(
       {
         error: "Internal Server Error",
-        message: error instanceof Error ? error.message : "Failed to upload document",
+        message: errorMessage,
+        debug: errorDetails,
       },
       { status: 500 },
     )

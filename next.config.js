@@ -22,7 +22,9 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  webpack: (config, { isServer, nextRuntime }) => {
+  // Generate source maps in production for better debugging
+  productionBrowserSourceMaps: process.env.NEXT_PUBLIC_DEBUG === "true",
+  webpack: (config, { isServer, nextRuntime, dev }) => {
     // General polyfills for Edge Runtime
     if (nextRuntime === "edge") {
       config.resolve.fallback = {
@@ -62,6 +64,16 @@ const nextConfig = {
         util: false,
         assert: false,
         events: false,
+      }
+
+      // Preserve console.* statements in production when debug is enabled
+      if (!dev && process.env.NEXT_PUBLIC_DEBUG === "true") {
+        config.optimization.minimizer.forEach((minimizer) => {
+          if (minimizer.constructor.name === "TerserPlugin") {
+            minimizer.options.minimizer.options.compress.drop_console = false
+            minimizer.options.minimizer.options.compress.pure_funcs = []
+          }
+        })
       }
     }
 
