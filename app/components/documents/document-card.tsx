@@ -1,8 +1,8 @@
 /**
- * Purpose: Document card component
+ * Purpose: Document card component with enhanced processing status display
  * Logic:
  * - Displays document information
- * - Shows processing status
+ * - Shows detailed processing status and progress
  * - Provides delete functionality
  * Runtime context: Client Component
  */
@@ -12,10 +12,11 @@ import { useState } from "react"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { CustomBadge } from "@/app/components/ui/custom-badge"
-import { Trash2, FileText, AlertCircle } from "lucide-react"
+import { Trash2, FileText, AlertCircle, Info } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
 import { formatBytes, formatDate } from "@/lib/utils"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface DocumentCardProps {
   document: {
@@ -28,6 +29,8 @@ interface DocumentCardProps {
     error?: string
     chunkCount?: number
     vectorCount?: number
+    processingStartedAt?: string
+    processingCompletedAt?: string
   }
 }
 
@@ -82,6 +85,29 @@ export function DocumentCard({ document }: DocumentCardProps) {
     }
   }
 
+  // Calculate processing time if available
+  const getProcessingTime = () => {
+    if (document.processingStartedAt && document.processingCompletedAt) {
+      const start = new Date(document.processingStartedAt).getTime()
+      const end = new Date(document.processingCompletedAt).getTime()
+      const durationMs = end - start
+
+      // Format duration nicely
+      if (durationMs < 1000) {
+        return `${durationMs}ms`
+      } else if (durationMs < 60000) {
+        return `${(durationMs / 1000).toFixed(1)}s`
+      } else {
+        const minutes = Math.floor(durationMs / 60000)
+        const seconds = Math.floor((durationMs % 60000) / 1000)
+        return `${minutes}m ${seconds}s`
+      }
+    }
+    return null
+  }
+
+  const processingTime = getProcessingTime()
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -101,8 +127,47 @@ export function DocumentCard({ document }: DocumentCardProps) {
 
           {document.status === "processed" && (
             <>
-              <div>Chunks: {document.chunkCount}</div>
-              <div>Vectors: {document.vectorCount}</div>
+              <div className="flex items-center gap-1">
+                <span>Chunks: {document.chunkCount}</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Semantic chunks created from the document</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <div className="flex items-center gap-1">
+                <span>Vectors: {document.vectorCount}</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Vector embeddings stored in Pinecone</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              {processingTime && (
+                <div className="flex items-center gap-1">
+                  <span>Processing time: {processingTime}</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Total time to process the document</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              )}
             </>
           )}
 
