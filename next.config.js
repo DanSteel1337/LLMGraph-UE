@@ -11,8 +11,9 @@ const nextConfig = {
     serverActions: {
       enabled: true,
     },
-    serverComponentsExternalPackages: ["sharp"],
   },
+  // Moved from experimental.serverComponentsExternalPackages to root-level serverExternalPackages
+  serverExternalPackages: ["sharp"],
   eslint: {
     ignoreDuringBuilds: true,
   },
