@@ -48,6 +48,9 @@ import { createServerClient } from "@supabase/ssr"
 // Consistent storage key across all environments
 const STORAGE_KEY = "supabase-auth"
 
+// Cache timeout in milliseconds
+const CACHE_TIMEOUT = 5000
+
 // Cache for environment variables
 const ENV_CACHE = {
   url: process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -79,7 +82,7 @@ export async function middleware(request: NextRequest) {
     if (!ENV_CACHE.url || !ENV_CACHE.key) {
       console.error("Missing Supabase environment variables")
       if (pathname.startsWith("/api/")) {
-        return NextResponse.json({ error: "Configuration error" }, { status: 500 })
+        return NextResponse.json({ error: "Internal Server Error", message: "Configuration error" }, { status: 500 })
       }
       return res
     }
@@ -137,7 +140,7 @@ export async function middleware(request: NextRequest) {
       // Clean up cache after request is complete (prevent memory leaks)
       setTimeout(() => {
         clientCache.delete(requestId)
-      }, 5000) // 5 seconds should be enough for most requests
+      }, CACHE_TIMEOUT)
     }
 
     // Check if user is authenticated using getUser()

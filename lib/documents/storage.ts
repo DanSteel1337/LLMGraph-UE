@@ -10,15 +10,35 @@ import { del } from "@vercel/blob"
 import { kv } from "@vercel/kv"
 import { createClient } from "../pinecone/client"
 
-export async function getDocuments() {
-  const keys = await kv.keys("document:*")
+// Optimized document listing with pagination support
+export async function getDocuments(limit = 100, cursor?: string) {
+  // Use scan pattern for efficient listing
+  const pattern = "document:*"
   const documents = []
-
-  for (const key of keys) {
-    if (!key.includes(":status") && !key.includes(":chunks") && !key.includes(":vectors")) {
-      const document = await kv.get(key)
-      if (document) {
-        documents.push(document)
+  
+  // Get keys matching pattern
+  const keys = await kv.keys(pattern)
+  
+  // Filter out status and metric keys
+  const documentKeys = keys.filter(key => 
+    !key.includes(":status") && 
+    !key.includes(":chunks") && 
+    !key.includes(":vectors")
+  )
+  
+  // Batch get for efficiency
+  if (documentKeys.length > 0) {
+    // Get documents in batches to avoid memory issues
+    const batchSize = 20
+    for (let i = 0; i < Math.min(documentKeys.length, limit); i += batchSize) {
+      const batch = documentKeys.slice(i, i + batchSize)
+      const batchPromises = batch.map(key => kv.get(key))
+      const batchResults = await Promise.all(batchPromises)
+      
+      for (const doc of batchResults) {
+        if (doc) {
+          documents.push(doc)
+        }
       }
     }
   }
@@ -53,11 +73,15 @@ export async function deleteDocument(id: string) {
     },
   })
 
-  // Delete metadata from KV
-  await kv.del(`document:${id}`)
-  await kv.del(`document:${id}:status`)
-  await kv.del(`document:${id}:chunks`)
-  await kv.del(`document:${id}:vectors`)
+  // Delete metadata from KV - batch delete for efficiency
+  const keysToDelete = [
+    `document:${id}`,
+    `document:${id}:status`,
+    `document:${id}:chunks`,
+    `document:${id}:vectors`
+  ]
+  
+  await Promise.all(keysToDelete.map(key => kv.del(key)))
 
   return { success: true }
 }

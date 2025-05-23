@@ -9,19 +9,6 @@
 import { PineconeRestClient } from "./rest-client"
 import { validateEnv } from "../utils/env"
 
-// Re-export types
-export type {
-  PineconeConfig,
-  PineconeVector,
-  PineconeQueryRequest,
-  PineconeQueryResponse,
-  PineconeUpsertRequest,
-  PineconeUpsertResponse,
-  PineconeDeleteRequest,
-  PineconeDeleteResponse,
-  PineconeIndexStats,
-} from "./rest-client"
-
 let pineconeClient: PineconeRestClient | null = null
 
 function sanitizeHost(host: string): string {
@@ -32,16 +19,18 @@ function sanitizeHost(host: string): string {
 export function createClient(): PineconeRestClient {
   validateEnv(["PINECONE"])
 
-  // Log Pinecone configuration (without exposing the API key)
-  const host = sanitizeHost(process.env.PINECONE_HOST!)
-
-  console.log("Creating Pinecone client with:", {
-    indexName: process.env.PINECONE_INDEX_NAME,
-    host: host,
-    apiKeySet: !!process.env.PINECONE_API_KEY,
-  })
-
   if (!pineconeClient) {
+    const host = sanitizeHost(process.env.PINECONE_HOST!)
+
+    // Only log in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log("Creating Pinecone client with:", {
+        indexName: process.env.PINECONE_INDEX_NAME,
+        host: host,
+        apiKeySet: !!process.env.PINECONE_API_KEY,
+      })
+    }
+
     pineconeClient = new PineconeRestClient({
       apiKey: process.env.PINECONE_API_KEY!,
       indexName: process.env.PINECONE_INDEX_NAME!,

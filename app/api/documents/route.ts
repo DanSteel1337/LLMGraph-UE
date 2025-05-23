@@ -40,9 +40,9 @@
  */
 
 import { type NextRequest, NextResponse } from "next/server"
-import { validateEnv } from "@/lib/utils/env"
-import { getDocuments, getDocument, deleteDocument } from "@/lib/documents/storage"
-import { createEdgeClient } from "@/lib/supabase-server"
+import { validateEnv } from "../../../lib/utils/env"
+import { getDocuments, getDocument, deleteDocument } from "../../../lib/documents/storage"
+import { createEdgeClient } from "../../../lib/supabase-server"
 
 export const runtime = "edge"
 
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase.auth.getUser()
 
     if (error || !data.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized", message: "Authentication required" }, { status: 401 })
     }
 
     // Get document ID from query params if present
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
       const document = await getDocument(documentId)
 
       if (!document) {
-        return NextResponse.json({ error: "Document not found" }, { status: 404 })
+        return NextResponse.json({ error: "Not Found", message: "Document not found" }, { status: 404 })
       }
 
       return NextResponse.json(document)
@@ -79,7 +79,10 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     console.error("Document API error:", error)
-    return NextResponse.json({ error: "Failed to process document request" }, { status: 500 })
+    return NextResponse.json({ 
+      error: "Internal Server Error", 
+      message: error instanceof Error ? error.message : "Failed to process document request" 
+    }, { status: 500 })
   }
 }
 
@@ -93,7 +96,7 @@ export async function DELETE(request: NextRequest) {
     const { data, error } = await supabase.auth.getUser()
 
     if (error || !data.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized", message: "Authentication required" }, { status: 401 })
     }
 
     // Get document ID from query params
@@ -101,7 +104,7 @@ export async function DELETE(request: NextRequest) {
     const documentId = url.searchParams.get("id")
 
     if (!documentId) {
-      return NextResponse.json({ error: "Document ID is required" }, { status: 400 })
+      return NextResponse.json({ error: "Bad Request", message: "Document ID is required" }, { status: 400 })
     }
 
     // Delete document
@@ -110,6 +113,9 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("Document deletion error:", error)
-    return NextResponse.json({ error: "Failed to delete document" }, { status: 500 })
+    return NextResponse.json({ 
+      error: "Internal Server Error", 
+      message: error instanceof Error ? error.message : "Failed to delete document" 
+    }, { status: 500 })
   }
 }

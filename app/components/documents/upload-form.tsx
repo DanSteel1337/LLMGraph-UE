@@ -298,11 +298,12 @@ function UploadFormContent() {
             const update = JSON.parse(line)
             handleProgressUpdate(update)
           } catch (parseError) {
-            console.error("Error parsing progress update:", parseError, line)
+            // Log parsing errors but continue processing
+            console.warn("Failed to parse progress update:", line)
           }
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       if (err.name !== "AbortError") {
         setError(err instanceof Error ? err.message : "An unknown error occurred during processing")
         setStage("error")

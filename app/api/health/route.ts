@@ -8,7 +8,7 @@
  * - Validates Supabase authentication service
  * - Checks Vercel KV storage availability
  * - Returns comprehensive service status
- * - No authentication required (public health endpoint)
+ * - Implements basic rate limiting
  *
  * Runtime: Vercel Edge Runtime for fast response times
  */
@@ -20,12 +20,50 @@ import { createEdgeClient } from "../../../lib/supabase-server"
 
 export const runtime = "edge"
 
+// Simple in-memory rate limiting (resets on new deployment)
+const rateLimitMap = new Map<string, number>()
+const RATE_LIMIT_WINDOW = 60000 // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 60 // 60 requests per minute
+
 function sanitizeHost(host: string): string {
   // Remove any protocol prefix (http:// or https://)
   return host ? host.replace(/^(https?:\/\/)/, "") : host
 }
 
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now()
+  const requests = rateLimitMap.get(ip) || 0
+  
+  // Clean up old entries
+  if (rateLimitMap.size > 1000) {
+    rateLimitMap.clear()
+  }
+  
+  if (requests >= RATE_LIMIT_MAX_REQUESTS) {
+    return false
+  }
+  
+  rateLimitMap.set(ip, requests + 1)
+  
+  // Reset counter after window
+  setTimeout(() => {
+    rateLimitMap.delete(ip)
+  }, RATE_LIMIT_WINDOW)
+  
+  return true
+}
+
 export async function GET(request: NextRequest) {
+  // Basic rate limiting
+  const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+  
+  if (!checkRateLimit(ip)) {
+    return NextResponse.json(
+      { error: "Too Many Requests", message: "Rate limit exceeded. Please try again later." },
+      { status: 429 }
+    )
+  }
+  
   try {
     // Don't validate env variables here since we're checking their status
     // validateEnv()
@@ -87,7 +125,10 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Health check error:", error)
     return NextResponse.json(
-      { error: "Health check failed", message: error instanceof Error ? error.message : "Unknown error" },
+      { 
+        error: "Internal Server Error", 
+        message: error instanceof Error ? error.message : "Health check failed" 
+      },
       { status: 500 },
     )
   }

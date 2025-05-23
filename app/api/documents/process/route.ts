@@ -47,11 +47,11 @@
  */
 
 import { type NextRequest, NextResponse } from "next/server"
-import { validateEnv } from "@/lib/utils/env"
+import { validateEnv } from "../../../lib/utils/env"
 import { kv } from "@vercel/kv"
-import { processDocumentWithProgress } from "@/lib/documents/processor"
-import { getDocument } from "@/lib/documents/storage"
-import { createEdgeClient } from "@/lib/supabase-server"
+import { processDocumentWithProgress } from "../../../lib/documents/processor"
+import { getDocument } from "../../../lib/documents/storage"
+import { createEdgeClient } from "../../../lib/supabase-server"
 
 export const runtime = "edge"
 

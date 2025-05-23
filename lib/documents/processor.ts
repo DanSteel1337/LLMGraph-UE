@@ -24,7 +24,7 @@
  * Chunking Strategy:
  * - Text documents: 200-500 tokens per chunk with 100 token overlap
  * - Code documents: 750-1500 tokens per chunk with 200 token overlap
- * - Preserve complete code blocks and Blueprint node descriptions
+ * - Preserve complete code blocks and technical documentation structure
  * - Extract headings and section information for metadata
  *
  * Embedding Configuration:
@@ -37,7 +37,7 @@
  * - Batch size: 50 vectors per upsert (Edge request limits)
  * - Consistent chunk IDs: ${documentId}-chunk-${index}
  * - Rich metadata: source, section, timestamp, heading, document ID
- * - Technical term weighting for UE5.4 terminology
+ * - Technical term extraction and weighting
  */
 
 import { chunkDocument } from "./chunker"
@@ -203,10 +203,10 @@ export async function processDocumentWithProgress(
       embeddingModel: EMBEDDING_MODEL,
       embeddingDimensions: EMBEDDING_DIMENSIONS,
       processingTimestamp: new Date().toISOString(),
-      // Technical term weighting for UE5.4 terminology
+      // Extract technical terms for better search
       technicalTerms: extractTechnicalTerms(chunk.text),
-      // Version awareness
-      engineVersion: extractEngineVersion(chunk.text) || "5.4.0",
+      // Extract version information if present
+      version: extractVersionInfo(chunk.text),
     },
   }))
 
@@ -285,57 +285,27 @@ export async function processDocumentWithProgress(
 function extractTechnicalTerms(text: string): string[] {
   const technicalTerms: string[] = []
 
-  // UE5.4 specific terms
-  const ue5Terms = [
-    "Blueprint",
-    "UE5",
-    "Unreal Engine",
-    "Actor",
-    "Component",
-    "Pawn",
-    "Character",
-    "GameMode",
-    "PlayerController",
-    "HUD",
-    "Widget",
-    "UMG",
-    "Material",
-    "Shader",
-    "Mesh",
-    "Animation",
-    "Montage",
-    "Sequence",
-    "Level",
-    "World",
-    "Landscape",
-    "Lighting",
-    "Lumen",
-    "Nanite",
-    "MetaHuman",
-    "Chaos",
-    "Physics",
-    "Collision",
+  // Common technical terms in API documentation
+  const commonTerms = [
+    "API", "REST", "GraphQL", "endpoint", "request", "response",
+    "authentication", "authorization", "token", "OAuth", "JWT",
+    "parameter", "query", "body", "header", "status", "error",
+    "GET", "POST", "PUT", "DELETE", "PATCH",
+    "JSON", "XML", "schema", "validation", "webhook",
+    "rate limit", "pagination", "filter", "sort",
+    "async", "sync", "callback", "promise", "stream"
   ]
 
-  // API and programming terms
-  const apiTerms = [
-    "function",
-    "class",
-    "method",
-    "property",
-    "parameter",
-    "return",
-    "void",
-    "const",
-    "static",
-    "virtual",
-    "override",
-    "public",
-    "private",
-    "protected",
+  // Framework and language specific terms
+  const frameworkTerms = [
+    "React", "Vue", "Angular", "Next.js", "Node.js",
+    "Express", "FastAPI", "Django", "Rails", "Spring",
+    "TypeScript", "JavaScript", "Python", "Java", "Go",
+    "component", "hook", "state", "props", "context",
+    "middleware", "controller", "service", "repository"
   ]
 
-  const allTerms = [...ue5Terms, ...apiTerms]
+  const allTerms = [...commonTerms, ...frameworkTerms]
 
   for (const term of allTerms) {
     if (text.toLowerCase().includes(term.toLowerCase())) {
@@ -343,11 +313,24 @@ function extractTechnicalTerms(text: string): string[] {
     }
   }
 
-  return technicalTerms
+  return [...new Set(technicalTerms)] // Remove duplicates
 }
 
-// Helper function to extract engine version information
-function extractEngineVersion(text: string): string | null {
-  const versionMatch = text.match(/(?:UE|Unreal Engine)\s*(\d+\.\d+(?:\.\d+)?)/i)
-  return versionMatch ? versionMatch[1] : null
+// Helper function to extract version information
+function extractVersionInfo(text: string): string | null {
+  // Common version patterns
+  const versionPatterns = [
+    /v?(\d+\.\d+(?:\.\d+)?)/i, // v1.2.3 or 1.2.3
+    /version\s*[:=]?\s*(\d+\.\d+(?:\.\d+)?)/i, // version: 1.2.3
+    /release\s*[:=]?\s*(\d+\.\d+(?:\.\d+)?)/i, // release: 1.2.3
+  ]
+
+  for (const pattern of versionPatterns) {
+    const match = text.match(pattern)
+    if (match) {
+      return match[1]
+    }
+  }
+
+  return null
 }

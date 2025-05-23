@@ -5,6 +5,7 @@
  * 
  * Features:
  * - Validates file types (Markdown, Text, PDF, HTML)
+ * - Validates file content and size
  * - Uploads files to Vercel Blob with private access
  * - Stores document metadata in Vercel KV
  * - Triggers asynchronous document processing
@@ -43,11 +44,15 @@
 
 import { type NextRequest, NextResponse } from "next/server"
 import { put } from "@vercel/blob"
-import { validateEnv } from "@/lib/utils/env"
+import { validateEnv } from "../../../lib/utils/env"
 import { kv } from "@vercel/kv"
-import { createEdgeClient } from "@/lib/supabase-server"
+import { createEdgeClient } from "../../../lib/supabase-server"
 
 export const runtime = "edge"
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+const ALLOWED_TYPES = ["text/markdown", "text/plain", "application/pdf", "text/html"]
+const ALLOWED_EXTENSIONS = [".md", ".txt", ".pdf", ".html"]
 
 export async function POST(request: NextRequest) {
   // Validate only the environment variables needed for this route
@@ -59,28 +64,47 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase.auth.getUser()
 
     if (error || !data.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized", message: "Authentication required" }, { status: 401 })
     }
 
     const formData = await request.formData()
     const file = formData.get("file") as File
 
     if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 })
+      return NextResponse.json({ error: "Bad Request", message: "No file provided" }, { status: 400 })
     }
 
     // Validate file type
-    const allowedTypes = ["text/markdown", "text/plain", "application/pdf", "text/html"]
-    if (!allowedTypes.includes(file.type)) {
+    if (!ALLOWED_TYPES.includes(file.type)) {
       return NextResponse.json(
-        { error: "Invalid file type. Supported types: Markdown, Text, PDF, HTML" },
+        { error: "Bad Request", message: "Invalid file type. Supported types: Markdown, Text, PDF, HTML" },
         { status: 400 },
       )
     }
 
+    // Validate file extension
+    const hasValidExtension = ALLOWED_EXTENSIONS.some(ext => file.name.toLowerCase().endsWith(ext))
+    if (!hasValidExtension) {
+      return NextResponse.json(
+        { error: "Bad Request", message: "Invalid file extension. Supported extensions: .md, .txt, .pdf, .html" },
+        { status: 400 },
+      )
+    }
+
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: "Bad Request", message: `File size too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB` },
+        { status: 400 },
+      )
+    }
+
+    // Validate file name for security
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-_]/g, '_')
+
     // Upload to Vercel Blob
     const documentId = `doc-${Date.now()}`
-    const blob = await put(`documents/${documentId}/${file.name}`, file, {
+    const blob = await put(`documents/${documentId}/${sanitizedFileName}`, file, {
       access: "private",
     })
 
@@ -93,6 +117,7 @@ export async function POST(request: NextRequest) {
       url: blob.url,
       uploadedAt: new Date().toISOString(),
       status: "uploaded",
+      userId: data.user.id, // Associate with user
     })
 
     // Trigger processing
@@ -103,6 +128,8 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        // Forward auth cookie for the background request
+        "Cookie": request.headers.get("Cookie") || "",
       },
     }).catch(console.error) // Non-blocking
 
@@ -114,6 +141,9 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Upload error:", error)
-    return NextResponse.json({ error: "Failed to upload document" }, { status: 500 })
+    return NextResponse.json({ 
+      error: "Internal Server Error", 
+      message: error instanceof Error ? error.message : "Failed to upload document" 
+    }, { status: 500 })
   }
 }
