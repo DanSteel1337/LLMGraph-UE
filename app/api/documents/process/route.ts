@@ -172,50 +172,52 @@ async function processInBackground(
     })
     debug.log("Attempting to fetch document from Blob:", url)
 
-    // Import the Vercel Blob get function directly to avoid bundling issues
-    const { get } = await import("@vercel/blob")
+    // Directly fetch the content using fetch API instead of Vercel Blob
+    try {
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch document: ${response.status} ${response.statusText}`)
+      }
 
-    const blob = await get(url)
-    if (!blob) {
-      throw new Error("Failed to fetch document content")
+      let content: string
+      if (type === "application/pdf") {
+        // For PDF, we would use a PDF parser here
+        // This is a placeholder - in a real implementation, you would use a PDF parsing library
+        content = "PDF content would be extracted here"
+        debug.log("PDF content extraction placeholder (not implemented)")
+      } else {
+        // For text-based documents, just get the text
+        content = await response.text()
+        debug.log("Text content extracted, length:", content.length)
+      }
+
+      // Process document with progress streaming
+      debug.log("Starting document processing with progress streaming")
+      await processDocumentWithProgress(
+        documentId,
+        content,
+        url.split("/").pop() || "document",
+        type,
+        async (progress) => {
+          debug.log("Processing progress update:", progress)
+          await write({
+            type: "info",
+            ...progress,
+          })
+        },
+      )
+      debug.log("Document processing completed successfully")
+
+      // Send completion message
+      await write({
+        type: "done",
+        message: "Document processing completed successfully",
+      })
+      debug.log("Sent completion message")
+    } catch (fetchError) {
+      debug.error("Error fetching document content:", fetchError)
+      throw new Error(`Failed to fetch document content: ${fetchError.message}`)
     }
-    debug.log("Document fetched successfully from Blob")
-
-    let content: string
-    if (type === "application/pdf") {
-      // For PDF, we would use a PDF parser here
-      // This is a placeholder - in a real implementation, you would use a PDF parsing library
-      content = "PDF content would be extracted here"
-      debug.log("PDF content extraction placeholder (not implemented)")
-    } else {
-      // For text-based documents, just get the text
-      content = await blob.text()
-      debug.log("Text content extracted, length:", content.length)
-    }
-
-    // Process document with progress streaming
-    debug.log("Starting document processing with progress streaming")
-    await processDocumentWithProgress(
-      documentId,
-      content,
-      blob.pathname.split("/").pop() || "document",
-      type,
-      async (progress) => {
-        debug.log("Processing progress update:", progress)
-        await write({
-          type: "info",
-          ...progress,
-        })
-      },
-    )
-    debug.log("Document processing completed successfully")
-
-    // Send completion message
-    await write({
-      type: "done",
-      message: "Document processing completed successfully",
-    })
-    debug.log("Sent completion message")
 
     // Close the stream
     await close()
