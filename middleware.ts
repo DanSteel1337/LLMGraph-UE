@@ -61,15 +61,13 @@ export async function middleware(request: NextRequest) {
   return response
 }
 
+// Simplify middleware for single-user access
+
+// Remove any complex user role checking
+// Remove any multi-tenant logic
+// Keep only basic session refresh
+
+// Simplify matcher to only protect dashboard routes
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public (public files)
-     */
-    "/((?!_next/static|_next/image|favicon.ico|public).*)",
-  ],
+  matcher: ["/dashboard/:path*"],
 }

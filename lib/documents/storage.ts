@@ -19,22 +19,24 @@ export async function getDocuments(limit = 100, cursor?: string) {
     // Get all keys matching the document pattern
     const allKeys = await kv.keys("document:*")
     console.log("[STORAGE] Found total keys:", allKeys.length)
+    console.log("[STORAGE] All keys:", allKeys)
 
-    // Filter to get only main document keys (not status/chunks/vectors)
-    const documentKeys = allKeys.filter(
-      (key) =>
-        !key.includes(":status") &&
-        !key.includes(":chunks") &&
-        !key.includes(":vectors") &&
-        !key.includes(":error") &&
-        !key.includes(":content-length") &&
-        !key.includes(":processed-at") &&
-        !key.includes(":processing-results"),
-    )
+    // Filter to get only main document keys (not status/chunks/vectors/etc.)
+    const documentKeys = allKeys.filter((key) => {
+      // Main document keys should be in format: document:{id}
+      // Exclude keys with additional suffixes
+      const parts = key.split(":")
+      const isMainDocumentKey = parts.length === 2 && parts[0] === "document"
+
+      console.log("[STORAGE] Checking key:", key, "isMainDocumentKey:", isMainDocumentKey)
+      return isMainDocumentKey
+    })
 
     console.log("[STORAGE] Filtered document keys:", documentKeys.length)
+    console.log("[STORAGE] Document keys:", documentKeys)
 
     if (documentKeys.length === 0) {
+      console.log("[STORAGE] No valid document keys found")
       return []
     }
 
@@ -45,15 +47,29 @@ export async function getDocuments(limit = 100, cursor?: string) {
 
     for (let i = 0; i < Math.min(documentKeys.length, limit); i += batchSize) {
       const batch = documentKeys.slice(i, i + batchSize)
+      console.log("[STORAGE] Processing batch:", batch)
+
       const batchResults = await Promise.all(batch.map((key) => kv.get(key)))
 
       for (let j = 0; j < batch.length; j++) {
         const doc = batchResults[j]
         const key = batch[j]
 
+        console.log("[STORAGE] Processing document from key:", key, "doc:", doc)
+
         // Validate document has required fields
-        if (!doc || !doc.id || !doc.name) {
-          console.warn("[STORAGE] Invalid document found, marking for cleanup:", key, doc)
+        if (!doc || typeof doc !== "object") {
+          console.warn("[STORAGE] Invalid document object found, marking for cleanup:", key, doc)
+          keysToCleanup.push(key)
+          continue
+        }
+
+        if (!doc.id || !doc.name) {
+          console.warn("[STORAGE] Document missing required fields, marking for cleanup:", key, {
+            hasId: !!doc.id,
+            hasName: !!doc.name,
+            doc,
+          })
           keysToCleanup.push(key)
           continue
         }
@@ -75,7 +91,12 @@ export async function getDocuments(limit = 100, cursor?: string) {
         }
 
         // Only include documents with valid IDs
-        if (normalizedDoc.id && normalizedDoc.id !== "undefined") {
+        if (normalizedDoc.id && normalizedDoc.id !== "undefined" && normalizedDoc.id.trim() !== "") {
+          console.log("[STORAGE] Adding valid document:", {
+            id: normalizedDoc.id,
+            name: normalizedDoc.name,
+            size: normalizedDoc.size,
+          })
           documents.push(normalizedDoc)
         } else {
           console.warn("[STORAGE] Document with invalid ID, marking for cleanup:", normalizedDoc)
@@ -86,7 +107,7 @@ export async function getDocuments(limit = 100, cursor?: string) {
 
     // Clean up invalid entries asynchronously
     if (keysToCleanup.length > 0) {
-      console.log("[STORAGE] Cleaning up", keysToCleanup.length, "invalid document entries")
+      console.log("[STORAGE] Cleaning up", keysToCleanup.length, "invalid document entries:", keysToCleanup)
       Promise.all(keysToCleanup.map((key) => kv.del(key))).catch((error) => {
         console.error("[STORAGE] Error cleaning up invalid entries:", error)
       })
@@ -235,6 +256,9 @@ export async function deleteDocument(documentId: string): Promise<{ success: boo
       `document:${documentId}:chunks`,
       `document:${documentId}:vectors`,
       `document:${documentId}:error`,
+      `document:${documentId}:content-length`,
+      `document:${documentId}:processed-at`,
+      `document:${documentId}:processing-results`,
     ]
 
     console.log("[STORAGE] Deleting KV keys:", keysToDelete)
@@ -288,6 +312,83 @@ export async function validateDocumentBlob(documentId: string): Promise<{
       exists: false,
       accessible: false,
       error: error instanceof Error ? error.message : "Unknown error",
+    }
+  }
+}
+
+/**
+ * Clean up orphaned KV entries
+ * Useful for maintenance and debugging
+ */
+export async function cleanupOrphanedEntries(): Promise<{
+  success: boolean
+  cleaned: number
+  errors: string[]
+}> {
+  console.log("[STORAGE] Starting cleanup of orphaned entries")
+
+  try {
+    const allKeys = await kv.keys("document:*")
+    console.log("[STORAGE] Found", allKeys.length, "total document-related keys")
+
+    const keysToDelete = []
+    const errors = []
+
+    // Group keys by document ID
+    const keysByDocId = new Map<string, string[]>()
+
+    for (const key of allKeys) {
+      const parts = key.split(":")
+      if (parts.length >= 2 && parts[0] === "document") {
+        const docId = parts[1]
+        if (!keysByDocId.has(docId)) {
+          keysByDocId.set(docId, [])
+        }
+        keysByDocId.get(docId)!.push(key)
+      }
+    }
+
+    // Check each document group
+    for (const [docId, keys] of keysByDocId) {
+      const mainKey = `document:${docId}`
+      const hasMainDocument = keys.includes(mainKey)
+
+      if (!hasMainDocument) {
+        // No main document, mark all related keys for deletion
+        console.log("[STORAGE] Found orphaned keys for document", docId, ":", keys)
+        keysToDelete.push(...keys)
+      } else {
+        // Check if main document is valid
+        try {
+          const doc = await kv.get(mainKey)
+          if (!doc || !doc.id || !doc.name) {
+            console.log("[STORAGE] Found invalid main document", docId, "marking all keys for deletion")
+            keysToDelete.push(...keys)
+          }
+        } catch (error) {
+          console.error("[STORAGE] Error checking document", docId, ":", error)
+          errors.push(`Error checking document ${docId}: ${error}`)
+        }
+      }
+    }
+
+    // Delete orphaned keys
+    if (keysToDelete.length > 0) {
+      console.log("[STORAGE] Deleting", keysToDelete.length, "orphaned keys:", keysToDelete)
+      await Promise.all(keysToDelete.map((key) => kv.del(key)))
+    }
+
+    return {
+      success: true,
+      cleaned: keysToDelete.length,
+      errors,
+    }
+  } catch (error) {
+    console.error("[STORAGE] Error during cleanup:", error)
+    return {
+      success: false,
+      cleaned: 0,
+      errors: [error instanceof Error ? error.message : "Unknown cleanup error"],
     }
   }
 }

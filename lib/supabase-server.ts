@@ -80,10 +80,8 @@ export const createEdgeClient = () => {
       },
       auth: {
         storageKey: STORAGE_KEY,
-        flowType: "pkce",
         autoRefreshToken: false, // Don't auto-refresh in API routes
         persistSession: false, // Don't persist in API routes
-        detectSessionInUrl: false,
       },
     },
   )

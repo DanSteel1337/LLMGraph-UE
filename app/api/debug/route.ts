@@ -1,22 +1,9 @@
-/**
- * Debug API Route
- *
- * Purpose: Provides diagnostic information for system components
- *
- * Features:
- * - Tests Pinecone connectivity using the custom REST client
- * - Validates embedding generation
- * - Performs test operations (upsert, query, delete)
- * - Returns detailed diagnostic information
- *
- * Runtime: Vercel Edge Runtime
- */
-
-import { NextResponse } from "next/server"
 import { createClient } from "../../../lib/pinecone/client"
 import { createEmbedding } from "../../../lib/ai/embeddings"
 import { kv } from "@vercel/kv"
 import { createEdgeClient } from "../../../lib/supabase-server"
+import { validateEnv } from "../../../lib/utils/env"
+import { testPineconeConnection } from "../../../lib/pinecone/client"
 
 export const runtime = "edge"
 
@@ -251,20 +238,57 @@ async function testSupabase() {
 }
 
 export async function GET() {
-  const timestamp = new Date().toISOString()
-  const environment = process.env.VERCEL_ENV || process.env.NODE_ENV || "development"
+  try {
+    // Simple auth check for single-user access
+    const supabase = createEdgeClient()
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
 
-  const tests = {
-    pinecone: await testPinecone(),
-    openai: await testOpenAI(),
-    kv: await testKV(),
-    supabase: await testSupabase(),
+    if (authError || !user) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Collect debug information
+    const envResult = validateEnv(["openai", "pinecone", "supabase", "blob", "kv"])
+    const pineconeHealth = await testPineconeConnection()
+
+    // Get KV stats
+    const kvKeys = await kv.keys("*")
+
+    const debug = {
+      timestamp: new Date().toISOString(),
+      user: {
+        id: user.id,
+        email: user.email,
+      },
+      environment: {
+        isValid: envResult.isValid,
+        groups: envResult.groups,
+        missing: envResult.missing,
+      },
+      services: {
+        supabase: !!user,
+        pinecone: pineconeHealth,
+        kv: kvKeys.length,
+      },
+      storage: {
+        kvKeys: kvKeys.length,
+        keyPatterns: kvKeys.reduce(
+          (acc, key) => {
+            const pattern = key.split(":")[0] || "unknown"
+            acc[pattern] = (acc[pattern] || 0) + 1
+            return acc
+          },
+          {} as Record<string, number>,
+        ),
+      },
+    }
+
+    return Response.json(debug)
+  } catch (error) {
+    console.error("Debug API error:", error)
+    return Response.json({ error: "Debug failed" }, { status: 500 })
   }
-
-  return NextResponse.json({
-    timestamp,
-    environment,
-    runtime: "edge",
-    tests,
-  })
 }

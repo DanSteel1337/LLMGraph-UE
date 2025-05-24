@@ -26,3 +26,11 @@ Always cite your sources using the numbers in brackets, e.g. [1], [2], etc.
 Context:
 ${context}`
 }
+
+// Missing export - alias for buildPrompt
+export function buildRAGPrompt(
+  messages: Message[],
+  searchResults: SearchResult[],
+): Array<{ role: "system" | "user" | "assistant"; content: string }> {
+  return buildPrompt(messages, searchResults)
+}

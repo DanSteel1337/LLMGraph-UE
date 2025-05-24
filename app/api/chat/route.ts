@@ -1,94 +1,51 @@
-/**
- * RAG Chat API Route
- *
- * Purpose: Main chat endpoint for RAG (Retrieval-Augmented Generation) functionality
- *
- * Features:
- * - Processes user messages and generates embeddings using text-embedding-3-large
- * - Searches for relevant context in Pinecone vector database
- * - Builds prompts with retrieved context
- * - Streams AI responses using OpenAI GPT-4
- *
- * Security: Requires valid Supabase authentication
- * Runtime: Vercel Edge Runtime for optimal performance
- */
-
-import type { NextRequest } from "next/server"
-import { StreamingTextResponse } from "ai"
-import { OpenAIStream } from "ai"
-import { validateEnv } from "../../../lib/utils/env"
-import { searchVectors } from "../../../lib/pinecone/search"
-import { buildPrompt } from "../../../lib/ai/prompts"
-import { createEmbedding, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL } from "../../../lib/ai/embeddings"
-import { createClient } from "../../../lib/pinecone/client"
 import { createEdgeClient } from "../../../lib/supabase-server"
+import { createEmbedding } from "../../../lib/ai/embeddings"
+import { searchVectors } from "../../../lib/pinecone/search"
+import { buildRAGPrompt } from "../../../lib/ai/prompts"
+import { streamChatCompletion } from "../../../lib/ai/chat"
+import { validateEnv } from "../../../lib/utils/env"
 
 export const runtime = "edge"
 
-export async function POST(request: NextRequest) {
-  // Validate only the environment variables needed for this route
-  validateEnv(["SUPABASE", "OPENAI", "PINECONE"])
-
+export async function POST(request: Request) {
   try {
-    // Validate authentication using edge client
+    // Validate environment
+    const envResult = validateEnv(["openai", "pinecone"])
+    if (!envResult.isValid) {
+      return Response.json({ error: "Environment configuration error" }, { status: 500 })
+    }
+
+    // Simple auth check for single-user access
     const supabase = createEdgeClient()
-    const { data, error } = await supabase.auth.getUser()
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
 
-    if (error || !data.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      })
+    if (authError || !user) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Parse request
-    const { messages, options = {} } = await request.json()
-    const lastMessage = messages[messages.length - 1]
+    const { messages } = await request.json()
+    const lastMessage = messages[messages.length - 1]?.content
 
-    // Generate embedding for the query using text-embedding-3-large
-    const embedding = await createEmbedding(lastMessage.content)
-
-    // Validate embedding dimensions
-    if (embedding.length !== EMBEDDING_DIMENSIONS) {
-      throw new Error(
-        `Embedding dimension mismatch: expected ${EMBEDDING_DIMENSIONS}, got ${embedding.length}. Model: ${EMBEDDING_MODEL}`,
-      )
+    if (!lastMessage) {
+      return Response.json({ error: "No message provided" }, { status: 400 })
     }
 
-    // Search for relevant context
-    const pineconeClient = createClient()
-    const searchResults = await searchVectors(pineconeClient, embedding, {
-      topK: options.topK || 5,
-      filter: options.filter,
-      includeMetadata: true,
-    })
+    // Generate embedding for the query
+    const embedding = await createEmbedding(lastMessage)
 
-    // Build prompt with context
-    const prompt = buildPrompt(messages, searchResults)
+    // Search for relevant documents
+    const searchResults = await searchVectors(embedding, 5)
 
-    // Generate response
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o",
-        messages: prompt,
-        temperature: options.temperature || 0.7,
-        stream: true,
-      }),
-    })
+    // Build RAG prompt with context
+    const prompt = buildRAGPrompt(lastMessage, searchResults)
 
-    // Stream response
-    const stream = OpenAIStream(response)
-    return new StreamingTextResponse(stream)
+    // Stream the response
+    return streamChatCompletion([...messages.slice(0, -1), { role: "user", content: prompt }])
   } catch (error) {
-    console.error("Chat error:", error)
-    return new Response(JSON.stringify({ error: "Failed to process chat request" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    })
+    console.error("Chat API error:", error)
+    return Response.json({ error: "Internal server error" }, { status: 500 })
   }
 }

@@ -3,7 +3,7 @@
 import type React from "react"
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useAuth } from "@/app/components/auth/auth-provider"
+import { useAuth } from "../components/auth/auth-provider"
 
 export default function AuthLayout({
   children,
@@ -14,14 +14,20 @@ export default function AuthLayout({
   const router = useRouter()
 
   useEffect(() => {
+    // Simple redirect for single-user access
     if (!loading && user) {
       router.push("/dashboard")
     }
   }, [user, loading, router])
 
-  // Show nothing while loading or if authenticated
-  if (loading || user) {
+  // Show loading while checking auth
+  if (loading) {
     return <div className="flex h-screen items-center justify-center">Loading...</div>
+  }
+
+  // Show login if not authenticated
+  if (user) {
+    return <div className="flex h-screen items-center justify-center">Redirecting...</div>
   }
 
   return (

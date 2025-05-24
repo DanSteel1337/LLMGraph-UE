@@ -1,11 +1,15 @@
 import type React from "react"
-import { AuthProvider } from "./components/auth/auth-provider"
-import { ThemeProvider } from "../components/theme-provider"
+import type { Metadata } from "next"
+import { Inter } from "next/font/google"
 import "./globals.css"
+import { AuthProvider } from "./components/auth/auth-provider"
+import { Toaster } from "@/components/ui/toaster"
 
-export const metadata = {
-  title: "LLMGraph-UE - RAG Dashboard",
-  description: "A serverless RAG dashboard for API documentation",
+const inter = Inter({ subsets: ["latin"] })
+
+export const metadata: Metadata = {
+  title: "LLMGraph-UE",
+  description: "RAG Dashboard for document processing and AI chat",
     generator: 'v0.dev'
 }
 
@@ -16,10 +20,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <AuthProvider>{children}</AuthProvider>
-        </ThemeProvider>
+      <body className={inter.className}>
+        <AuthProvider>
+          {children}
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   )

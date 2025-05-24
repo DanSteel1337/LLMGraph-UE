@@ -50,3 +50,27 @@ export function createClient(): PineconeRestClient {
 
   return pineconeClient
 }
+
+// Missing export - test Pinecone connection
+export async function testPineconeConnection(): Promise<{
+  success: boolean
+  error?: string
+  stats?: any
+}> {
+  try {
+    const client = createClient()
+
+    // Test connection by getting index stats
+    const stats = await client.describeIndexStats()
+
+    return {
+      success: true,
+      stats,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    }
+  }
+}

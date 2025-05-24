@@ -1,14 +1,6 @@
 "use client"
 
 import type React from "react"
-
-/**
- * Purpose: Layout for dashboard pages
- * Logic:
- * - Provides consistent layout with header and sidebar
- * - Protects routes requiring authentication
- * Runtime context: Client Component (for auth check)
- */
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Header } from "../components/layout/header"
@@ -24,14 +16,20 @@ export default function DashboardLayout({
   const router = useRouter()
 
   useEffect(() => {
+    // Simple auth check for single-user access
     if (!loading && !user) {
       router.push("/auth/login")
     }
   }, [user, loading, router])
 
-  // Show nothing while loading or if not authenticated
-  if (loading || !user) {
+  // Show loading while checking auth
+  if (loading) {
     return <div className="flex h-screen items-center justify-center">Loading...</div>
+  }
+
+  // Redirect if not authenticated
+  if (!user) {
+    return <div className="flex h-screen items-center justify-center">Redirecting to login...</div>
   }
 
   return (

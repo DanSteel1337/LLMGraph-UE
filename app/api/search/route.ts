@@ -1,75 +1,44 @@
-/**
- * Vector Search API Route
- *
- * Purpose: Provides direct access to semantic search functionality without chat context
- *
- * Features:
- * - Generates embeddings for search queries using OpenAI text-embedding-3-large
- * - Performs vector similarity search in Pinecone
- * - Supports metadata filtering for targeted searches
- * - Returns ranked search results with similarity scores
- * - Includes hybrid search capabilities (vector + keyword)
- */
-
-import { type NextRequest, NextResponse } from "next/server"
-import { validateEnv } from "../../../lib/utils/env"
-import { createClient } from "../../../lib/pinecone/client"
-import { searchVectors } from "../../../lib/pinecone/search"
-import { createEmbedding, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL } from "../../../lib/ai/embeddings"
 import { createEdgeClient } from "../../../lib/supabase-server"
+import { createEmbedding } from "../../../lib/ai/embeddings"
+import { searchVectors } from "../../../lib/pinecone/search"
+import { validateEnv } from "../../../lib/utils/env"
 
 export const runtime = "edge"
 
-export async function POST(request: NextRequest) {
-  // Validate only the environment variables needed for this route
-  validateEnv(["SUPABASE", "OPENAI", "PINECONE"])
-
+export async function POST(request: Request) {
   try {
-    // Validate authentication using edge client
+    // Validate environment
+    const envResult = validateEnv(["openai", "pinecone"])
+    if (!envResult.isValid) {
+      return Response.json({ error: "Environment configuration error" }, { status: 500 })
+    }
+
+    // Simple auth check for single-user access
     const supabase = createEdgeClient()
-    const { data, error } = await supabase.auth.getUser()
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
 
-    if (error || !data.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (authError || !user) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Parse request
-    const { query, options = {} } = await request.json()
+    const { query, limit = 5 } = await request.json()
 
-    if (!query || typeof query !== "string") {
-      return NextResponse.json({ error: "Query is required" }, { status: 400 })
+    if (!query) {
+      return Response.json({ error: "Query is required" }, { status: 400 })
     }
 
-    // Generate embedding for the query using text-embedding-3-large
+    // Generate embedding for the search query
     const embedding = await createEmbedding(query)
 
-    // Validate embedding dimensions
-    if (embedding.length !== EMBEDDING_DIMENSIONS) {
-      throw new Error(
-        `Embedding dimension mismatch: expected ${EMBEDDING_DIMENSIONS}, got ${embedding.length}. Model: ${EMBEDDING_MODEL}`,
-      )
-    }
+    // Search for relevant documents
+    const results = await searchVectors(embedding, limit)
 
-    // Search for relevant vectors
-    const pineconeClient = createClient()
-    const searchResults = await searchVectors(pineconeClient, embedding, {
-      topK: options.topK || 5,
-      filter: options.filter,
-      includeMetadata: true,
-      hybridSearch: options.hybridSearch,
-    })
-
-    return NextResponse.json({
-      results: searchResults,
-      metadata: {
-        embeddingModel: EMBEDDING_MODEL,
-        embeddingDimensions: EMBEDDING_DIMENSIONS,
-        query: query,
-        topK: options.topK || 5,
-      },
-    })
+    return Response.json({ results })
   } catch (error) {
-    console.error("Search error:", error)
-    return NextResponse.json({ error: "Failed to process search request" }, { status: 500 })
+    console.error("Search API error:", error)
+    return Response.json({ error: "Internal server error" }, { status: 500 })
   }
 }

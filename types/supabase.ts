@@ -1,48 +1,40 @@
 /**
- * Supabase Database Types
+ * Minimal Supabase Types for Single-User Auth
  *
- * This file contains the TypeScript types for your Supabase database.
- * You can generate these types using the Supabase CLI:
- *
- * npx supabase gen types typescript --project-id your-project-id > types/supabase.ts
+ * Purpose: Essential type definitions for authentication
+ * Scope: Email/password authentication only
  */
-
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export interface Database {
   public: {
     Tables: {
-      // Add your table definitions here
-      // Example:
-      // users: {
-      //   Row: {
-      //     id: string
-      //     email: string
-      //     created_at: string
-      //   }
-      //   Insert: {
-      //     id?: string
-      //     email: string
-      //     created_at?: string
-      //   }
-      //   Update: {
-      //     id?: string
-      //     email?: string
-      //     created_at?: string
-      //   }
-      // }
+      // No user tables needed for single-user access
+      // Auth handled entirely by Supabase Auth service
     }
     Views: {
-      [_ in never]: never
+      // No custom views needed
     }
     Functions: {
-      [_ in never]: never
+      // No custom functions needed
     }
     Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
+      // No custom enums needed
     }
   }
 }
+
+// Minimal user type from Supabase Auth
+export type User = {
+  id: string
+  email?: string
+  created_at: string
+  updated_at: string
+}
+
+// Simple auth state
+export type AuthState = {
+  user: User | null
+  loading: boolean
+}
+
+// No complex user roles, permissions, or profile types needed
