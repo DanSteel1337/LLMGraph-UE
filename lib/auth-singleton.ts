@@ -36,7 +36,7 @@ function getAuthClient() {
   return authClient
 }
 
-// ✅ INITIALIZE AUTH STATE
+// ✅ INITIALIZE AUTH STATE - FIXED TO HANDLE MISSING SESSION GRACEFULLY
 async function initializeAuth() {
   if (isGloballyInitialized) return
 
@@ -44,23 +44,29 @@ async function initializeAuth() {
     const client = getAuthClient()
     if (!client) return
 
-    const {
-      data: { user },
-      error,
-    } = await client.auth.getUser()
+    // Get current session state
+    const { data, error } = await client.auth.getSession()
 
+    // ✅ FIX: Don't treat missing session as an error
     if (error) {
-      console.error("[AUTH] Initialization error:", error)
+      console.warn("[AUTH] Session retrieval warning:", error.message)
+      // Continue initialization with null user
     }
 
-    currentUser = user
+    // Set user from session (if exists)
+    currentUser = data?.session?.user ?? null
+
+    // ✅ FIX: Always mark as initialized, even with no user
     isGloballyInitialized = true
     isLoading = false
 
-    console.log("[AUTH] Initialized with user:", user?.email || "no user")
+    console.log("[AUTH] Initialized with user:", currentUser?.email || "no user")
     notifyAllSubscribers()
   } catch (error) {
     console.error("[AUTH] Fatal initialization error:", error)
+
+    // ✅ FIX: Still mark as initialized to prevent loops
+    isGloballyInitialized = true
     isLoading = false
     notifyAllSubscribers()
   }

@@ -71,7 +71,21 @@ export function useAuthGuard(
   const router = useRouter()
   const hasCheckedAuth = useRef(false)
   const [shouldRender, setShouldRender] = useState(false)
-  const { navigate, navigateWithAuth } = useNavigate()
+  const { navigate } = useNavigate()
+
+  const navigateWithAuth = (path: string, requireAuth = true) => {
+    const { user } = useAuth()
+
+    if (requireAuth && !user) {
+      return safeNavigate(router, "/auth/login", "Auth required for navigation")
+    }
+
+    if (!requireAuth && user) {
+      return safeNavigate(router, "/dashboard", "Already authenticated")
+    }
+
+    return safeNavigate(router, path, "Conditional navigation")
+  }
 
   useEffect(() => {
     // ✅ WAIT FOR AUTH INITIALIZATION
@@ -140,21 +154,7 @@ export function useNavigate() {
     return safeNavigate(router, path, reason)
   }
 
-  const navigateWithAuth = (path: string, requireAuth = true) => {
-    const { user } = useAuth()
-
-    if (requireAuth && !user) {
-      return safeNavigate(router, "/auth/login", "Auth required for navigation")
-    }
-
-    if (!requireAuth && user) {
-      return safeNavigate(router, "/dashboard", "Already authenticated")
-    }
-
-    return safeNavigate(router, path, "Conditional navigation")
-  }
-
-  return { navigate, navigateWithAuth }
+  return { navigate }
 }
 
 // ✅ LOADING COMPONENT FOR GUARDS
