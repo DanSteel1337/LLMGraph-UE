@@ -80,6 +80,13 @@ const nextConfig = {
 
     return config
   },
+  experimental: {
+    serverActions: {
+      enabled: true,
+    },
+    // Allow sharp to run build scripts
+    allowedBuildScripts: ["sharp"],
+  },
 }
 
 module.exports = nextConfig

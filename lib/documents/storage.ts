@@ -105,10 +105,29 @@ export async function getDocuments(limit = 100, cursor?: string) {
       }
     }
 
-    // Clean up invalid entries asynchronously
+    // Enhanced cleanup for orphaned document keys
     if (keysToCleanup.length > 0) {
       console.log("[STORAGE] Cleaning up", keysToCleanup.length, "invalid document entries:", keysToCleanup)
-      Promise.all(keysToCleanup.map((key) => kv.del(key))).catch((error) => {
+
+      // Also clean up related orphaned keys for the same document IDs
+      const orphanedDocIds = new Set<string>()
+      keysToCleanup.forEach((key) => {
+        const parts = key.split(":")
+        if (parts.length >= 2) {
+          orphanedDocIds.add(parts[1])
+        }
+      })
+
+      // Find and clean up all related keys for orphaned documents
+      const additionalKeysToCleanup: string[] = []
+      for (const docId of orphanedDocIds) {
+        const relatedKeys = allKeys.filter((key) => key.includes(docId))
+        additionalKeysToCleanup.push(...relatedKeys)
+      }
+
+      const allKeysToCleanup = [...new Set([...keysToCleanup, ...additionalKeysToCleanup])]
+
+      Promise.all(allKeysToCleanup.map((key) => kv.del(key))).catch((error) => {
         console.error("[STORAGE] Error cleaning up invalid entries:", error)
       })
     }
