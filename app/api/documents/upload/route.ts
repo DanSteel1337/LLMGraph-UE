@@ -54,9 +54,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Validate authentication using edge client
+    // Validate authentication using edge client - FIXED: Remove request parameter
     serverDebug("Creating Supabase edge client")
-    const supabase = createEdgeClient(request)
+    const supabase = createEdgeClient()
 
     serverDebug("Getting authenticated user")
     const { data, error } = await supabase.auth.getUser()
