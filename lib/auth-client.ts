@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import type { User } from "@supabase/supabase-js"
 
 let browserClient: ReturnType<typeof createBrowserClient> | null = null
+let globalInitialized = false
 
 /**
  * Singleton browser client for client-side auth
@@ -32,9 +33,8 @@ function getBrowserClient() {
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const [isInitialized, setIsInitialized] = useState(false)
-  const initRef = useRef(false)
-  const redirectRef = useRef(false)
+  const [isInitialized, setIsInitialized] = useState(globalInitialized)
+  const initRef = useRef(globalInitialized)
 
   // Sign in function
   const signIn = useCallback(async (email: string, password: string) => {
@@ -65,7 +65,10 @@ export function useAuth() {
       const supabase = getBrowserClient()
       await supabase.auth.signOut()
       setUser(null)
-      redirectRef.current = false
+      globalInitialized = false
+      initRef.current = false
+
+      // Use window.location for clean redirect
       window.location.href = "/auth/login"
     } catch (error) {
       console.error("Sign out error:", error)
@@ -77,6 +80,7 @@ export function useAuth() {
     if (typeof window === "undefined" || initRef.current) return
 
     initRef.current = true
+    globalInitialized = true
 
     const initializeAuth = async () => {
       try {
@@ -98,7 +102,7 @@ export function useAuth() {
       }
     }
 
-    // Set up auth state listener
+    // Set up auth state listener - NO AUTOMATIC REDIRECTS
     const supabase = getBrowserClient()
     const {
       data: { subscription },
@@ -106,21 +110,13 @@ export function useAuth() {
       setUser(session?.user ?? null)
       setLoading(false)
 
-      // Prevent multiple redirects
-      if (event === "SIGNED_IN" && !redirectRef.current) {
-        redirectRef.current = true
-        window.location.href = "/dashboard"
-      } else if (event === "SIGNED_OUT" && !redirectRef.current) {
-        redirectRef.current = true
-        window.location.href = "/auth/login"
-      }
+      // ❌ REMOVED AUTOMATIC REDIRECTS - Let components handle routing
     })
 
     initializeAuth()
 
     return () => {
       subscription.unsubscribe()
-      initRef.current = false
     }
   }, [])
 

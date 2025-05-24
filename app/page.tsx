@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "../components/ui/button"
 import Link from "next/link"
@@ -9,23 +9,27 @@ import { useAuth } from "../lib/auth-client"
 export default function LandingPage() {
   const { user, loading, isInitialized } = useAuth()
   const router = useRouter()
-  const [hasRedirected, setHasRedirected] = useState(false)
+  const hasRedirectedRef = useRef(false)
+  const [isRedirecting, setIsRedirecting] = useState(false)
 
   useEffect(() => {
     // Only redirect once when fully initialized and user exists
-    if (isInitialized && !loading && user && !hasRedirected) {
-      setHasRedirected(true)
+    if (isInitialized && !loading && user && !hasRedirectedRef.current && !isRedirecting) {
+      hasRedirectedRef.current = true
+      setIsRedirecting(true)
+
+      // Use replace to avoid history issues
       router.replace("/dashboard")
     }
-  }, [isInitialized, loading, user, hasRedirected, router])
+  }, [isInitialized, loading, user]) // ❌ REMOVED router from dependencies
 
-  // Show loading while auth is initializing
-  if (!isInitialized || loading) {
+  // Show loading while auth is initializing or redirecting
+  if (!isInitialized || loading || isRedirecting) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-          <p className="mt-2 text-sm text-muted-foreground">Loading...</p>
+          <p className="mt-2 text-sm text-muted-foreground">{isRedirecting ? "Redirecting..." : "Loading..."}</p>
         </div>
       </div>
     )
