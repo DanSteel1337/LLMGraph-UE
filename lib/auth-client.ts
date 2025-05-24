@@ -14,30 +14,23 @@ import type { Database } from "@/types/supabase"
 let browserClient: ReturnType<typeof createBrowserClient<Database>> | null = null
 
 /**
- * Validates required environment variables
- * @private Internal helper function
- */
-function validateEnvironment() {
-  const requiredEnvs = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"] as const
-
-  requiredEnvs.forEach((env) => {
-    if (!process.env[env]) {
-      throw new Error(`Missing required environment variable: ${env}`)
-    }
-  })
-}
-
-/**
  * Gets or creates a Supabase client for browser use
  * ONLY use in client components or client-side code
  */
 export function getSupabaseClient() {
   if (!browserClient) {
-    validateEnvironment()
+    // Check for environment variables only when the function is called
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      throw new Error("Missing required environment variable: NEXT_PUBLIC_SUPABASE_URL")
+    }
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      throw new Error("Missing required environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY")
+    }
 
     browserClient = createBrowserClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     )
   }
   return browserClient
@@ -72,9 +65,14 @@ export async function signOut() {
  * @returns The current user or null if not authenticated
  */
 export async function getCurrentUser() {
-  const supabase = getSupabaseClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  return user
+  try {
+    const supabase = getSupabaseClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    return user
+  } catch (error) {
+    console.error("Error getting current user:", error)
+    return null
+  }
 }
