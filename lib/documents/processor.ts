@@ -2,6 +2,7 @@ import { chunkDocument } from "./chunker"
 import { createEmbeddingBatch, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL } from "../ai/embeddings"
 import { kv } from "@vercel/kv"
 import { createClient } from "../pinecone/client"
+import { fetchBlobContent, validateBlobExists } from "../utils/blob-fetch"
 import type { PineconeVector } from "../pinecone/types"
 
 // Progress callback type
@@ -70,7 +71,7 @@ export class DocumentProcessor {
   }
 }
 
-// Process document with progress updates
+// Process document with progress updates and blob validation
 export async function processDocumentWithProgress(
   documentId: string,
   content: string,
@@ -271,14 +272,66 @@ export async function processDocumentWithProgress(
   return { chunks, vectors }
 }
 
+// Enhanced process document function with blob validation
+export async function processDocumentFromBlob(
+  documentId: string,
+  blobUrl: string,
+  type: string,
+  onProgress: ProgressCallback,
+) {
+  const processor = new DocumentProcessor(documentId)
+
+  try {
+    await processor.setState("processing", 0)
+
+    // Step 1: Validate blob exists
+    onProgress({
+      stage: "processing",
+      percent: 5,
+      message: "Validating document accessibility...",
+    })
+
+    const blobExists = await validateBlobExists(blobUrl)
+    if (!blobExists) {
+      throw new Error("Document not found in storage. It may have been deleted.")
+    }
+
+    // Step 2: Fetch content using safe blob fetch
+    onProgress({
+      stage: "processing",
+      percent: 10,
+      message: "Fetching document content...",
+    })
+
+    const content = await fetchBlobContent(blobUrl)
+
+    if (!content || content.length === 0) {
+      throw new Error("Document appears to be empty")
+    }
+
+    // Step 3: Process with full pipeline
+    const filename = blobUrl.split("/").pop() || "unknown"
+    const result = await processDocumentWithProgress(documentId, content, filename, type, onProgress)
+
+    await processor.setState("completed", 100)
+    return { success: true, ...result }
+  } catch (error) {
+    await processor.setState("failed", 0)
+    throw error
+  }
+}
+
 // Legacy function for backward compatibility
 export async function processDocument(documentId: string, url: string, type: string) {
   const processor = new DocumentProcessor(documentId)
 
   try {
     await processor.setState("processing", 0)
-    // Implementation would fetch content from URL and process
-    // This is a simplified version
+
+    // Use the new blob validation approach
+    const content = await fetchBlobContent(url)
+
+    // Simple processing for legacy compatibility
     await processor.setState("completed", 100)
     return { success: true }
   } catch (error) {

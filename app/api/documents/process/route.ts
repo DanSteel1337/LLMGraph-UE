@@ -1,13 +1,22 @@
 /**
- * Document Processing API Route - Simplified and Robust
+ * Document Processing API Route - Edge Runtime Compatible
+ *
+ * IMPORTANT: Edge Runtime Fetch Requirements
+ * - Always validate Vercel Blob URLs exist using head() before fetch()
+ * - The head() method ensures the blob exists and returns valid metadata
+ * - This prevents "Cannot read properties of undefined" errors
+ * - Edge Runtime requires proper URL validation before fetch operations
+ *
+ * @see https://vercel.com/docs/storage/vercel-blob/using-blob-sdk
  */
 
 import { type NextRequest, NextResponse } from "next/server"
+import { head } from "@vercel/blob"
 import { kv } from "@vercel/kv"
 import { validateEnv } from "../../../../lib/utils/env"
 import { createEdgeClient } from "../../../../lib/supabase-server"
 import { getDocument } from "../../../../lib/documents/storage"
-import { debug, captureError } from "../../../lib/utils/debug"
+import { fetchBlobContent } from "../../../../lib/utils/blob-fetch"
 
 export const runtime = "edge"
 
@@ -27,14 +36,13 @@ function createStream() {
 }
 
 export async function POST(request: NextRequest) {
-  debug.group("Document Processing API")
-  debug.log("Processing request started")
+  console.log("[DEBUG] Document Processing API - Request started")
 
   try {
     validateEnv(["SUPABASE", "VERCEL_BLOB", "VERCEL_KV"])
-    debug.log("Environment variables validated")
+    console.log("[DEBUG] Environment variables validated")
   } catch (error) {
-    debug.error("Environment validation failed:", error)
+    console.error("[DEBUG] Environment validation failed:", error)
     return NextResponse.json(
       { error: "Configuration Error", message: "Missing required environment variables" },
       { status: 500 },
@@ -45,49 +53,49 @@ export async function POST(request: NextRequest) {
     // Validate authentication
     const supabase = createEdgeClient()
     const { data, error } = await supabase.auth.getUser()
-    debug.log("Auth check result:", error ? "Failed" : "Success")
+    console.log("[DEBUG] Auth check result:", error ? "Failed" : "Success")
 
     if (error || !data.user) {
-      debug.error("Authentication failed:", error)
+      console.error("[DEBUG] Authentication failed:", error)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     // Get document ID from query params
     const url = new URL(request.url)
     const documentId = url.searchParams.get("id")
-    debug.log("Document ID from query:", documentId)
+    console.log("[DEBUG] Document ID from query:", documentId)
 
     if (!documentId) {
-      debug.error("Missing document ID")
+      console.error("[DEBUG] Missing document ID")
       return NextResponse.json({ error: "Document ID is required" }, { status: 400 })
     }
 
     // Get document metadata
-    debug.log("Fetching document metadata for ID:", documentId)
+    console.log("[DEBUG] Fetching document metadata for ID:", documentId)
     const document = await getDocument(documentId)
-    debug.log("Document metadata result:", document ? "Found" : "Not found")
+    console.log("[DEBUG] Document metadata result:", document ? "Found" : "Not found")
 
     if (!document) {
-      debug.error("Document not found:", documentId)
+      console.error("[DEBUG] Document not found:", documentId)
       return NextResponse.json({ error: "Document not found" }, { status: 404 })
     }
 
     // Check if document is already being processed
     const status = await kv.get(`document:${documentId}:status`)
-    debug.log("Document status:", status)
+    console.log("[DEBUG] Document status:", status)
 
     if (status === "processing") {
-      debug.error("Document already processing:", documentId)
+      console.error("[DEBUG] Document already processing:", documentId)
       return NextResponse.json({ error: "Document is already being processed" }, { status: 400 })
     }
 
     // Set up streaming response
-    debug.log("Setting up streaming response")
+    console.log("[DEBUG] Setting up streaming response")
     const { stream, write, close } = createStream()
 
     // Process document in the background
-    processDocumentSimple(documentId, document.url, document.type, write, close).catch((error) => {
-      debug.error(`Error processing document ${documentId}:`, error)
+    processDocumentWithValidation(documentId, document.url, document.type, write, close).catch((error) => {
+      console.error(`[DEBUG] Error processing document ${documentId}:`, error)
       write({
         type: "error",
         message: error instanceof Error ? error.message : "An unknown error occurred",
@@ -96,8 +104,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Return streaming response
-    debug.log("Returning streaming response")
-    debug.groupEnd()
+    console.log("[DEBUG] Returning streaming response")
     return new Response(stream, {
       headers: {
         "Content-Type": "text/event-stream",
@@ -106,35 +113,39 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    const errorInfo = captureError(error, "Document processing API")
-    debug.error("Document processing error:", errorInfo)
-    debug.groupEnd()
+    console.error("[DEBUG] Document processing error:", error)
 
     return NextResponse.json(
       {
         error: "Internal Server Error",
         message: error instanceof Error ? error.message : "Failed to process document",
-        ...(process.env.NEXT_PUBLIC_DEBUG === "true" && { debug: errorInfo }),
+        ...(process.env.NEXT_PUBLIC_DEBUG === "true" && {
+          debug: {
+            message: error instanceof Error ? error.message : "Unknown error",
+            stack: error instanceof Error ? error.stack : undefined,
+          },
+        }),
       },
       { status: 500 },
     )
   }
 }
 
-async function processDocumentSimple(
+async function processDocumentWithValidation(
   documentId: string,
   url: string,
   type: string,
   write: (message: any) => Promise<void>,
   close: () => Promise<void>,
 ) {
-  debug.group(`Simple Processing: ${documentId}`)
-  debug.log("Starting simple processing for document:", documentId)
+  console.log(`[DEBUG] Starting validated processing for document: ${documentId}`)
+  console.log(`[DEBUG] Document URL: ${url}`)
+  console.log(`[DEBUG] Document type: ${type}`)
 
   try {
     // Update document status
     await kv.set(`document:${documentId}:status`, "processing")
-    debug.log("Document status set to processing")
+    console.log("[DEBUG] Document status set to processing")
 
     // Send initial progress update
     await write({
@@ -144,11 +155,49 @@ async function processDocumentSimple(
       message: "Starting document processing...",
     })
 
-    // Step 1: Fetch document content
+    // Step 1: Validate blob exists using head() method
     await write({
       type: "info",
       stage: "processing",
-      percent: 20,
+      percent: 10,
+      message: "Validating document accessibility...",
+    })
+
+    console.log("[DEBUG] Validating blob exists using head() method")
+
+    try {
+      // Use head() to validate blob exists and get metadata
+      const blobMetadata = await head(url, {
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+      })
+
+      console.log("[DEBUG] Blob validation successful:", {
+        size: blobMetadata.size,
+        contentType: blobMetadata.contentType,
+        uploadedAt: blobMetadata.uploadedAt,
+      })
+
+      await write({
+        type: "info",
+        stage: "processing",
+        percent: 20,
+        message: `Document validated (${(blobMetadata.size / 1024).toFixed(1)} KB)`,
+      })
+    } catch (headError) {
+      console.error("[DEBUG] Blob validation failed:", headError)
+
+      if (headError.name === "BlobNotFoundError") {
+        throw new Error("Document not found in storage. It may have been deleted.")
+      }
+
+      throw new Error(`Failed to validate document: ${headError.message}`)
+    }
+
+    // Step 2: Fetch document content using the utility function
+    await write({
+      type: "info",
+      stage: "processing",
+      percent: 30,
       message: "Fetching document content...",
     })
 
@@ -156,47 +205,39 @@ async function processDocumentSimple(
     let contentLength = 0
 
     try {
-      debug.log("Fetching content from URL:", url)
-
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          Accept: "text/plain, text/*, */*",
-          "User-Agent": "LLMGraph-UE/1.0",
-        },
-      })
-
-      debug.log("Response status:", response.status)
-      debug.log("Response headers:", Object.fromEntries(response.headers.entries()))
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
+      console.log("[DEBUG] Fetching content using validated blob fetch")
 
       if (type === "application/pdf") {
         content = "PDF processing not yet implemented"
         contentLength = content.length
+        console.log("[DEBUG] PDF processing placeholder used")
       } else {
-        const responseText = await response.text()
-        content = responseText || ""
+        // Use the utility function for safe blob fetching
+        content = await fetchBlobContent(url)
         contentLength = content.length
+        console.log("[DEBUG] Content fetched successfully, length:", contentLength)
       }
-
-      debug.log("Content fetched successfully, length:", contentLength)
 
       if (contentLength === 0) {
         throw new Error("Document appears to be empty")
       }
+
+      await write({
+        type: "info",
+        stage: "processing",
+        percent: 50,
+        message: `Content loaded (${contentLength} characters)`,
+      })
     } catch (fetchError) {
-      debug.error("Fetch error:", fetchError)
-      throw new Error(`Failed to fetch document: ${fetchError.message}`)
+      console.error("[DEBUG] Content fetch error:", fetchError)
+      throw new Error(`Failed to fetch document content: ${fetchError.message}`)
     }
 
-    // Step 2: Basic content processing
+    // Step 3: Basic content processing
     await write({
       type: "info",
-      stage: "processing",
-      percent: 50,
+      stage: "chunking",
+      percent: 60,
       message: "Processing document content...",
     })
 
@@ -210,12 +251,19 @@ async function processDocumentSimple(
         index,
       }))
 
-    debug.log("Created chunks:", chunks.length)
+    console.log("[DEBUG] Created chunks:", chunks.length)
 
-    // Step 3: Store processing results
     await write({
       type: "info",
-      stage: "processing",
+      stage: "chunking",
+      percent: 70,
+      message: `Document chunked into ${chunks.length} segments`,
+    })
+
+    // Step 4: Store processing results
+    await write({
+      type: "info",
+      stage: "storing",
       percent: 80,
       message: "Storing processing results...",
     })
@@ -224,16 +272,16 @@ async function processDocumentSimple(
     await kv.set(`document:${documentId}:chunks`, chunks.length)
     await kv.set(`document:${documentId}:content-length`, contentLength)
     await kv.set(`document:${documentId}:processed-at`, new Date().toISOString())
-    await kv.set(`document:${documentId}:status`, "processed")
+    await kv.set(`document:${documentId}:status`, "completed")
 
-    debug.log("Processing results stored")
+    console.log("[DEBUG] Processing results stored")
 
-    // Step 4: Complete
+    // Step 5: Complete
     await write({
       type: "info",
       stage: "completed",
       percent: 100,
-      message: `Document processed successfully! Created ${chunks.length} chunks.`,
+      message: `Document processed successfully! Created ${chunks.length} chunks from ${contentLength} characters.`,
     })
 
     await write({
@@ -241,9 +289,9 @@ async function processDocumentSimple(
       message: "Document processing completed successfully",
     })
 
-    debug.log("Processing completed successfully")
+    console.log("[DEBUG] Processing completed successfully")
   } catch (error) {
-    debug.error("Processing error:", error)
+    console.error("[DEBUG] Processing error:", error)
 
     // Update status to error
     await kv.set(`document:${documentId}:status`, "error")
@@ -251,13 +299,13 @@ async function processDocumentSimple(
 
     await write({
       type: "error",
+      stage: "error",
       message: error instanceof Error ? error.message : "Processing failed",
     })
 
     throw error
   } finally {
     await close()
-    debug.log("Stream closed")
-    debug.groupEnd()
+    console.log("[DEBUG] Stream closed")
   }
 }
