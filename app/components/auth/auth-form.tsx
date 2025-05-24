@@ -1,14 +1,13 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { useToast } from "@/hooks/use-toast"
-import { useAuth } from "./auth-provider"
+import { Button } from "../../../components/ui/button"
+import { Input } from "../../../components/ui/input"
+import { Label } from "../../../components/ui/label"
+import { useToast } from "../../../hooks/use-toast"
+import { useAuth } from "../../../lib/auth-client"
 import { ErrorBoundary } from "../ui/error-boundary"
 import { AlertCircle } from "lucide-react"
 

@@ -3,36 +3,46 @@
 import type React from "react"
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useAuth } from "../components/auth/auth-provider"
+import { useAuth } from "../../lib/auth-client"
 
 export default function AuthLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { user, loading } = useAuth()
+  const { user, loading, isInitialized } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    // Simple redirect for single-user access
-    if (!loading && user) {
+    if (isInitialized && !loading && user) {
       router.push("/dashboard")
     }
-  }, [user, loading, router])
+  }, [user, loading, isInitialized, router])
 
-  // Show loading while checking auth
-  if (loading) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>
+  if (loading || !isInitialized) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+          <p className="mt-2 text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    )
   }
 
-  // Show login if not authenticated
   if (user) {
-    return <div className="flex h-screen items-center justify-center">Redirecting...</div>
+    return null // Will redirect to dashboard
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-muted/50">
-      <div className="w-full max-w-md">{children}</div>
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="w-full max-w-md space-y-6">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">LLMGraph-UE</h1>
+          <p className="text-muted-foreground">Sign in to your account</p>
+        </div>
+        {children}
+      </div>
     </div>
   )
 }

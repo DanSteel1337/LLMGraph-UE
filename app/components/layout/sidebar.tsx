@@ -1,19 +1,12 @@
-/**
- * Purpose: Sidebar navigation component
- * Logic:
- * - Provides navigation links for the dashboard
- * - Highlights active routes
- * Runtime context: Client Component
- */
 "use client"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "../../../lib/utils"
 import { Button } from "../../../components/ui/button"
-import { MessageSquare, FileText, Settings, Bug } from "lucide-react"
+import { MessageSquare, FileText, Settings, Activity } from "lucide-react"
 
-const navItems = [
+const navigation = [
   {
     name: "Chat",
     href: "/dashboard",
@@ -32,7 +25,7 @@ const navItems = [
   {
     name: "Debug",
     href: "/dashboard/debug",
-    icon: Bug,
+    icon: Activity,
   },
 ]
 
@@ -40,28 +33,28 @@ export function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="hidden w-64 shrink-0 border-r bg-muted/40 md:block">
-      <div className="flex h-full flex-col gap-2 p-4">
-        <nav className="grid gap-1 px-2 pt-2">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href
-
-            return (
-              <Button
-                key={item.href}
-                variant={isActive ? "secondary" : "ghost"}
-                className={cn("justify-start", isActive ? "bg-secondary" : "hover:bg-muted")}
-                asChild
-              >
-                <Link href={item.href}>
-                  <item.icon className="mr-2 h-4 w-4" />
-                  {item.name}
-                </Link>
-              </Button>
-            )
-          })}
-        </nav>
+    <div className="flex h-full w-64 flex-col border-r bg-background">
+      <div className="flex h-14 items-center border-b px-4">
+        <h2 className="text-lg font-semibold">Dashboard</h2>
       </div>
-    </aside>
+      <nav className="flex-1 space-y-1 p-4">
+        {navigation.map((item) => {
+          const isActive = pathname === item.href
+          return (
+            <Button
+              key={item.name}
+              variant={isActive ? "secondary" : "ghost"}
+              className={cn("w-full justify-start", isActive && "bg-secondary")}
+              asChild
+            >
+              <Link href={item.href}>
+                <item.icon className="mr-2 h-4 w-4" />
+                {item.name}
+              </Link>
+            </Button>
+          )
+        })}
+      </nav>
+    </div>
   )
 }

@@ -1,22 +1,13 @@
-/**
- * Purpose: Settings form component
- * Logic:
- * - Allows configuration of RAG parameters
- * - Saves settings to Vercel KV
- * Runtime context: Client Component
- * Services: Vercel KV (via API route)
- */
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Slider } from "@/components/ui/slider"
-import { Switch } from "@/components/ui/switch"
-import { useToast } from "@/components/ui/use-toast"
+import { Button } from "../../../components/ui/button"
+import { Input } from "../../../components/ui/input"
+import { Label } from "../../../components/ui/label"
+import { Slider } from "../../../components/ui/slider"
+import { Switch } from "../../../components/ui/switch"
+import { useToast } from "../../../hooks/use-toast"
 import { useRouter } from "next/navigation"
 
 interface SettingsFormProps {

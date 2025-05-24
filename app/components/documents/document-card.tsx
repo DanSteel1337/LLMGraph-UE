@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../../components/ui/card"
 import { Button } from "../../../components/ui/button"
-import { CustomBadge } from "../ui/custom-badge"
+import { Badge } from "../../../components/ui/badge"
 import { FileText, Trash2, RefreshCw, AlertCircle, CheckCircle } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip"
@@ -32,22 +32,13 @@ export function DocumentCard({
   const [isDeleting, setIsDeleting] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  // Enhanced logging for debugging
-  console.log("[DOCUMENT CARD] Rendering card:", {
-    id,
-    title,
-    status,
-    chunks,
-    description,
-  })
-
   const handleDelete = async () => {
     if (!onDelete) return
     setIsDeleting(true)
     try {
       onDelete(id)
     } catch (error) {
-      console.error("[DOCUMENT CARD] Error deleting document:", error)
+      console.error("Error deleting document:", error)
     } finally {
       setIsDeleting(false)
     }
@@ -59,7 +50,7 @@ export function DocumentCard({
     try {
       onRefresh(id)
     } catch (error) {
-      console.error("[DOCUMENT CARD] Error refreshing document:", error)
+      console.error("Error refreshing document:", error)
     } finally {
       setIsRefreshing(false)
     }
@@ -100,28 +91,23 @@ export function DocumentCard({
     switch (status) {
       case "indexed":
       case "completed":
-        return "success"
+        return "default"
       case "processing":
       case "uploaded":
-        return "warning"
+        return "secondary"
       case "error":
         return "destructive"
       default:
-        return "secondary"
+        return "outline"
     }
   }
 
-  // Format the date safely
   const formatDate = (dateValue: Date | string) => {
     try {
-      // Handle string dates or invalid dates
       const date = dateValue instanceof Date ? dateValue : new Date(dateValue)
-
-      // Check if date is valid before formatting
       if (isNaN(date.getTime())) {
         return "Unknown date"
       }
-
       return formatDistanceToNow(date, { addSuffix: true })
     } catch (error) {
       console.error("Date formatting error:", error)
@@ -141,10 +127,10 @@ export function DocumentCard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <div>
-                  <CustomBadge variant={getStatusVariant()}>
+                  <Badge variant={getStatusVariant()}>
                     {getStatusIcon()}
                     <span className="ml-1">{getStatusLabel()}</span>
-                  </CustomBadge>
+                  </Badge>
                 </div>
               </TooltipTrigger>
               <TooltipContent>

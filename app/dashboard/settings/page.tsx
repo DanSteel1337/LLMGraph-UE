@@ -1,11 +1,3 @@
-/**
- * Purpose: Settings page for the application
- * Logic:
- * - Provides basic settings for the application
- * - Allows configuration of RAG parameters
- * Runtime context: Server Component
- * Services: Vercel KV (for settings storage)
- */
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
 import { SettingsForm } from "../../components/settings/settings-form"
 import { kv } from "@vercel/kv"
@@ -23,7 +15,7 @@ const DEFAULT_SETTINGS = {
 
 async function getSettings() {
   try {
-    const settings = await kv.get("settings")
+    const settings = await kv.get("app:settings")
     return settings || DEFAULT_SETTINGS
   } catch (error) {
     console.error("Failed to get settings:", error)
@@ -39,7 +31,7 @@ export default async function SettingsPage() {
       <Card className="border-none shadow-none">
         <CardHeader className="px-0">
           <CardTitle>Settings</CardTitle>
-          <CardDescription>Configure your RAG dashboard</CardDescription>
+          <CardDescription>Configure your RAG dashboard parameters</CardDescription>
         </CardHeader>
       </Card>
 

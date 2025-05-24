@@ -1,46 +1,44 @@
-/**
- * FINALIZED AUTHENTICATION SYSTEM - DO NOT MODIFY
- *
- * This component provides authentication context to the entire application.
- * Enhanced version with better singleton handling and cleanup.
- *
- * See docs/AUTH_LOCKED.md for details on why this implementation works
- * and why it should not be modified.
- */
-
 "use client"
 
-import type React from "react"
-
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react"
-import { useRouter } from "next/navigation"
-import { getBrowserClient } from "../../../lib/supabase"
+import { createBrowserClient } from "@supabase/ssr"
+import { useState, useEffect, useCallback, useRef } from "react"
 import type { User } from "@supabase/supabase-js"
 
-type AuthContextType = {
-  user: User | null
-  loading: boolean
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>
-  signOut: () => Promise<void>
-  isInitialized: boolean
+let browserClient: ReturnType<typeof createBrowserClient> | null = null
+
+/**
+ * Singleton browser client for client-side auth
+ */
+function getBrowserClient() {
+  if (typeof window === "undefined") {
+    throw new Error("getBrowserClient can only be called on the client side")
+  }
+
+  if (!browserClient) {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      throw new Error("Missing Supabase environment variables")
+    }
+
+    browserClient = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  }
+
+  return browserClient
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
-
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+/**
+ * Client-side auth hook - Single source of truth for React components
+ * MUST be used in ALL client components that need auth - no other auth hooks allowed
+ */
+export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [isInitialized, setIsInitialized] = useState(false)
-  const router = useRouter()
   const initRef = useRef(false)
-  const supabaseRef = useRef(typeof window !== "undefined" ? getBrowserClient() : null)
 
   // Sign in function
   const signIn = useCallback(async (email: string, password: string) => {
-    const supabase = supabaseRef.current
-    if (!supabase) return { error: new Error("Supabase client not initialized") }
-
     try {
+      const supabase = getBrowserClient()
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -62,27 +60,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Sign out function
   const signOut = useCallback(async () => {
-    const supabase = supabaseRef.current
-    if (!supabase) return
-
     try {
+      const supabase = getBrowserClient()
       await supabase.auth.signOut()
       setUser(null)
-      router.push("/auth/login")
+      window.location.href = "/auth/login"
     } catch (error) {
       console.error("Sign out error:", error)
     }
-  }, [router])
+  }, [])
 
   // Initialize auth state and listeners
   useEffect(() => {
-    const supabase = supabaseRef.current
-    if (!supabase || initRef.current) return
+    if (typeof window === "undefined" || initRef.current) return
 
     initRef.current = true
 
     const initializeAuth = async () => {
       try {
+        const supabase = getBrowserClient()
+
         // Get initial session
         const {
           data: { user: initialUser },
@@ -99,14 +96,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Set up auth state listener
+    const supabase = getBrowserClient()
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null)
       setLoading(false)
 
-      if (event === "SIGNED_IN" || event === "SIGNED_OUT") {
-        router.refresh()
+      if (event === "SIGNED_IN") {
+        window.location.href = "/dashboard"
+      } else if (event === "SIGNED_OUT") {
+        window.location.href = "/auth/login"
       }
     })
 
@@ -116,23 +116,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe()
       initRef.current = false
     }
-  }, [router])
+  }, [])
 
-  const value = {
+  return {
     user,
     loading,
     signIn,
     signOut,
     isInitialized,
   }
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider")
-  }
-  return context
 }

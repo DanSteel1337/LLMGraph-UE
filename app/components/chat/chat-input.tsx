@@ -1,16 +1,9 @@
-/**
- * Purpose: Chat input component
- * Logic:
- * - Handles user input for chat
- * - Submits messages to chat API
- * Runtime context: Client Component
- */
 "use client"
 
 import type React from "react"
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
+import { Button } from "../../../components/ui/button"
+import { Textarea } from "../../../components/ui/textarea"
 import { SendIcon } from "lucide-react"
 
 interface ChatInputProps {

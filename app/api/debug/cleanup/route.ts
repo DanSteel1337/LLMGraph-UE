@@ -1,41 +1,23 @@
-/**
- * Debug Cleanup API Route
- *
- * Purpose: Provides cleanup utilities for development and maintenance
- *
- * Features:
- * - Clean up orphaned KV entries
- * - Validate document integrity
- * - System diagnostics
- *
- * Security: Requires valid authentication
- * Runtime: Vercel Edge Runtime
- */
-
 import { type NextRequest, NextResponse } from "next/server"
 import { validateEnv } from "../../../../lib/utils/env"
-import { createEdgeClient } from "../../../../lib/supabase-server"
+import { validateAuth, unauthorizedResponse } from "../../../../lib/auth"
 import { cleanupOrphanedEntries } from "../../../../lib/documents/storage"
 import { kv } from "@vercel/kv"
 
 export const runtime = "edge"
 
 export async function POST(request: NextRequest) {
-  validateEnv(["SUPABASE", "VERCEL_KV"])
-
   try {
-    // Validate authentication
-    const supabase = createEdgeClient()
-    const { data, error } = await supabase.auth.getUser()
+    validateEnv(["SUPABASE", "VERCEL_KV"])
 
-    if (error || !data.user) {
-      return NextResponse.json({ error: "Unauthorized", message: "Authentication required" }, { status: 401 })
-    }
+    // Single source of truth auth validation
+    const { user, error } = await validateAuth()
+    if (error) return unauthorizedResponse()
 
     const body = await request.json()
     const { action } = body
 
-    console.log("[CLEANUP API] Received cleanup request:", action)
+    console.log("[CLEANUP API] Received cleanup request:", action, "from user:", user.id)
 
     switch (action) {
       case "cleanup":
@@ -45,7 +27,7 @@ export async function POST(request: NextRequest) {
 
       case "list-keys":
         const allKeys = await kv.keys("document:*")
-        console.log("[CLEANUP API] Found keys:", allKeys)
+        console.log("[CLEANUP API] Found keys:", allKeys.length)
         return NextResponse.json({ keys: allKeys, count: allKeys.length })
 
       case "clear-all":
@@ -72,28 +54,24 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  validateEnv(["SUPABASE", "VERCEL_KV"])
-
   try {
-    // Validate authentication
-    const supabase = createEdgeClient()
-    const { data, error } = await supabase.auth.getUser()
+    validateEnv(["SUPABASE", "VERCEL_KV"])
 
-    if (error || !data.user) {
-      return NextResponse.json({ error: "Unauthorized", message: "Authentication required" }, { status: 401 })
-    }
+    // Single source of truth auth validation
+    const { user, error } = await validateAuth()
+    if (error) return unauthorizedResponse()
 
     // Get all document-related keys for inspection
     const allKeys = await kv.keys("document:*")
 
-    // Group keys by type
+    // Group keys by type for better analysis
     const keysByType = {
-      main: [],
-      status: [],
-      chunks: [],
-      vectors: [],
-      error: [],
-      other: [],
+      main: [] as string[],
+      status: [] as string[],
+      chunks: [] as string[],
+      vectors: [] as string[],
+      error: [] as string[],
+      other: [] as string[],
     }
 
     for (const key of allKeys) {
@@ -112,12 +90,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log("[CLEANUP API] Key analysis:", keysByType)
+    console.log("[CLEANUP API] Key analysis for user:", user.id, "Total keys:", allKeys.length)
 
     return NextResponse.json({
       total: allKeys.length,
       keysByType,
       allKeys,
+      user: {
+        id: user.id,
+        email: user.email,
+      },
     })
   } catch (error) {
     console.error("[CLEANUP API] Error:", error)

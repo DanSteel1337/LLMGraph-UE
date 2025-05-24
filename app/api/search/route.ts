@@ -1,4 +1,4 @@
-import { createEdgeClient } from "../../../lib/supabase-server"
+import { validateAuth, unauthorizedResponse } from "../../../lib/auth"
 import { createEmbedding } from "../../../lib/ai/embeddings"
 import { searchVectors } from "../../../lib/pinecone/search"
 import { validateEnv } from "../../../lib/utils/env"
@@ -13,16 +13,9 @@ export async function POST(request: Request) {
       return Response.json({ error: "Environment configuration error" }, { status: 500 })
     }
 
-    // Simple auth check for single-user access
-    const supabase = createEdgeClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    // Single source of truth auth validation
+    const { user, error } = await validateAuth()
+    if (error) return unauthorizedResponse()
 
     const { query, limit = 5 } = await request.json()
 

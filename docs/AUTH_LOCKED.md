@@ -1,79 +1,99 @@
-# 🔒 Authentication System - LOCKED
+# Authentication Architecture - Single Source of Truth
 
-This document serves as official confirmation that the authentication system has been finalized, thoroughly tested, and should be considered **LOCKED** for further modifications unless absolutely necessary.
+## Overview
 
-## Current Implementation
+LLMGraph-UE implements a **singleton authentication pattern** that ensures zero duplication and maximum security across the entire application.
 
-The authentication system uses Supabase Auth with a carefully implemented singleton pattern to prevent the "Multiple GoTrueClient instances" warning and ensure consistent behavior across all environments.
+## Architecture
 
-### Key Components
+### **Server-Side Authentication (`lib/auth.ts`)**
+- **Purpose**: API route authentication
+- **Pattern**: `validateAuth()` → `unauthorizedResponse()`
+- **Runtime**: Edge Runtime compatible
+- **No "use client"**: Server-side only
 
-1. **`lib/supabase.ts`**: Single source of truth for all Supabase clients
-   - `getBrowserClient()`: Browser-side singleton (using module scope)
-   - Uses a true singleton pattern to prevent multiple instances
-
-2. **`lib/supabase-server.ts`**: Server-side clients
-   - `createClient()`: Server-side singleton (using React cache)
-   - `createEdgeClient()`: Edge runtime client with request-scoped caching
-
-3. **`app/components/auth/auth-provider.tsx`**: React context provider
-   - Manages auth state across the application
-   - Uses useRef to store the Supabase client instance
-   - Provides user data and auth methods to components
-
-4. **`middleware.ts`**: Protects API routes
-   - Uses consistent storage key and configuration
-   - Implements request-scoped caching to prevent multiple instances
-   - Validates authentication using `getUser()`
-
-### Why It Works
-
-1. **True Singleton Pattern**: Each environment has a dedicated singleton implementation
-2. **Consistent Storage Key**: All clients use the same `STORAGE_KEY = "supabase-auth"`
-3. **PKCE Flow**: All clients use the same authentication flow type
-4. **Secure Validation**: Server-side code uses `getUser()` instead of `getSession()`
-5. **Request-Scoped Caching**: Middleware and Edge functions use request-scoped caching
-6. **Clean Implementation**: No duplicate or unused auth code
-
-## ⚠️ DO NOT MODIFY
-
-The authentication system has been carefully implemented to work correctly across all environments. Modifying any part of it risks reintroducing the "Multiple GoTrueClient instances" warning or breaking authentication.
-
-### If Changes Are Absolutely Necessary
-
-1. Document the reason for the change
-2. Ensure all client types (server, edge, browser) remain consistent
-3. Maintain the singleton pattern for each environment
-4. Use the same storage key and flow type
-5. Test thoroughly in all environments
-6. Update this documentation
-
-## Approved Auth Patterns
-
-### Server Components
 \`\`\`typescript
-import { createClient } from "@/lib/supabase"
-
-// In a Server Component or server action
-const supabase = createClient()
-const { data, error } = await supabase.auth.getUser()
+// Every API route follows this exact pattern
+const { user, error } = await validateAuth()
+if (error) return unauthorizedResponse()
 \`\`\`
 
-### API Routes
+### **Client-Side Authentication (`lib/auth-client.ts`)**
+- **Purpose**: React component authentication
+- **Pattern**: `useAuth()` hook
+- **Features**: State management, sign in/out, session handling
+- **Singleton**: Browser client instance reused
+
 \`\`\`typescript
-import { createEdgeClient } from "@/lib/supabase"
-
-// In an API route
-const supabase = createEdgeClient()
-const { data, error } = await supabase.auth.getUser()
-\`\`\`
-
-### Client Components
-\`\`\`typescript
-import { useAuth } from "@/app/components/auth/auth-provider"
-
-// In a Client Component
+// Every client component uses this hook
 const { user, loading, signIn, signOut } = useAuth()
 \`\`\`
 
-## Last Verified: May 23, 2025
+## Key Principles
+
+### **1. Single Source of Truth**
+- **Server**: Only `lib/auth.ts` for API routes
+- **Client**: Only `lib/auth-client.ts` for components
+- **Zero Duplication**: No other auth files exist
+
+### **2. Consistent Patterns**
+- **API Routes**: Always `validateAuth()` first
+- **Components**: Always `useAuth()` hook
+- **Error Handling**: Standardized responses
+
+### **3. Edge Runtime Compatibility**
+- **Relative Imports**: No `@/` aliases in server code
+- **Cookie Handling**: Proper SSR cookie management
+- **Performance**: Optimized for Edge Runtime
+
+### **4. Security**
+- **Session Validation**: Every request validated
+- **Proper Logout**: Complete session cleanup
+- **Error Boundaries**: Graceful failure handling
+
+## Implementation Details
+
+### **API Route Pattern**
+\`\`\`typescript
+import { validateAuth, unauthorizedResponse } from "../../../lib/auth"
+
+export async function POST(request: Request) {
+  // Always validate auth first
+  const { user, error } = await validateAuth()
+  if (error) return unauthorizedResponse()
+  
+  // Your route logic here
+}
+\`\`\`
+
+### **Component Pattern**
+\`\`\`typescript
+import { useAuth } from "../../lib/auth-client"
+
+export function MyComponent() {
+  const { user, loading, signOut } = useAuth()
+  
+  if (loading) return <Loading />
+  if (!user) return <Redirect />
+  
+  // Your component logic here
+}
+\`\`\`
+
+## Migration Notes
+
+### **Removed Files**
+- ❌ `lib/supabase.ts` - Replaced by auth singletons
+- ❌ `lib/supabase-server.ts` - Replaced by auth singletons  
+- ❌ `app/components/auth/auth-provider.tsx` - Replaced by client hook
+
+### **Updated Patterns**
+- ✅ All API routes use `validateAuth()`
+- ✅ All components use `useAuth()` hook
+- ✅ Consistent error handling
+- ✅ Edge Runtime compatibility
+
+This architecture ensures **zero auth logic duplication** while maintaining **maximum security** and **optimal performance**.
+\`\`\`
+
+### **Step 5: Update Pinecone Documentation**

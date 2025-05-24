@@ -1,20 +1,13 @@
-import { createEdgeClient } from "../../../lib/supabase-server"
+import { validateAuth, unauthorizedResponse } from "../../../lib/auth"
 import { getDocuments, deleteDocument } from "../../../lib/documents/storage"
 
 export const runtime = "edge"
 
 export async function GET() {
   try {
-    // Simple auth check for single-user access
-    const supabase = createEdgeClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    // Single source of truth auth validation
+    const { user, error } = await validateAuth()
+    if (error) return unauthorizedResponse()
 
     const documents = await getDocuments()
     return Response.json({ documents })
@@ -26,16 +19,9 @@ export async function GET() {
 
 export async function DELETE(request: Request) {
   try {
-    // Simple auth check for single-user access
-    const supabase = createEdgeClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    // Single source of truth auth validation
+    const { user, error } = await validateAuth()
+    if (error) return unauthorizedResponse()
 
     const { searchParams } = new URL(request.url)
     const documentId = searchParams.get("id")

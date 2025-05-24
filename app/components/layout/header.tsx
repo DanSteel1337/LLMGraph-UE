@@ -10,9 +10,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu"
-import { useToast } from "../../../components/ui/use-toast"
+import { useToast } from "../../../hooks/use-toast"
 import { User, LogOut, Settings } from "lucide-react"
-import { useAuth } from "../auth/auth-provider"
+import { useAuth } from "../../../lib/auth-client"
 
 export function Header() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)

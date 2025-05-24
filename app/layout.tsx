@@ -2,14 +2,13 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
-import { AuthProvider } from "./components/auth/auth-provider"
-import { Toaster } from "@/components/ui/toaster"
+import { Toaster } from "../components/ui/toaster"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "LLMGraph-UE",
-  description: "RAG Dashboard for document processing and AI chat",
+  title: "LLMGraph-UE | Serverless RAG Dashboard",
+  description: "Serverless RAG dashboard for UE5.4 API documentation with vector search and AI chat",
     generator: 'v0.dev'
 }
 
@@ -21,10 +20,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AuthProvider>
-          {children}
-          <Toaster />
-        </AuthProvider>
+        {children}
+        <Toaster />
       </body>
     </html>
   )

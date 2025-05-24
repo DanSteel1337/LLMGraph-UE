@@ -1,41 +1,13 @@
 import { kv } from "@vercel/kv"
-import { createEdgeClient } from "../../../lib/supabase-server"
+import { validateAuth, unauthorizedResponse } from "../../../lib/auth"
 
 export const runtime = "edge"
 
-// Default settings
-const DEFAULT_SETTINGS = {
-  topK: 5,
-  temperature: 0.7,
-  hybridSearch: true,
-  chunkSize: {
-    text: 300,
-    code: 1000,
-  },
-}
-
-// Validation ranges
-const VALIDATION_RULES = {
-  topK: { min: 1, max: 10 },
-  temperature: { min: 0, max: 1 },
-  chunkSize: {
-    text: { min: 100, max: 1000 },
-    code: { min: 500, max: 2000 },
-  },
-}
-
 export async function GET() {
   try {
-    // Simple auth check for single-user access
-    const supabase = createEdgeClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    // Single source of truth auth validation
+    const { user, error } = await validateAuth()
+    if (error) return unauthorizedResponse()
 
     // Get settings from KV store
     const settings = (await kv.get("app:settings")) || {}
@@ -49,16 +21,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    // Simple auth check for single-user access
-    const supabase = createEdgeClient()
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    // Single source of truth auth validation
+    const { user, error } = await validateAuth()
+    if (error) return unauthorizedResponse()
 
     const settings = await request.json()
 

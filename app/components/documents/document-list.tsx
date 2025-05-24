@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../../../components/ui/alert-dialog"
-import { useToast } from "../../../components/ui/use-toast"
+import { useToast } from "../../../hooks/use-toast"
 import { DocumentCard } from "./document-card"
 import { Loader2 } from "lucide-react"
 
@@ -37,7 +37,6 @@ interface DocumentListProps {
 }
 
 export function DocumentList({ documents: initialDocuments }: DocumentListProps) {
-  // Filter out invalid documents immediately
   const validInitialDocuments = initialDocuments.filter(
     (doc) => doc.id && doc.id !== "undefined" && doc.name && doc.name.trim() !== "" && doc.name !== "Unnamed Document",
   )
@@ -48,7 +47,6 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const { toast } = useToast()
 
-  // Enhanced polling with better validation
   useEffect(() => {
     const processingDocs = localDocuments.filter(
       (doc) => doc.id && doc.id !== "undefined" && (doc.status === "processing" || doc.status === "uploaded"),
@@ -58,8 +56,6 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
       return
     }
 
-    console.log("[DOCUMENT LIST] Starting polling for", processingDocs.length, "valid processing documents")
-
     const interval = setInterval(async () => {
       try {
         const response = await fetch("/api/documents", {
@@ -68,52 +64,27 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
 
         if (response.ok) {
           const updatedDocuments = await response.json()
-
-          // Filter out invalid documents from the response
-          const validUpdatedDocuments = updatedDocuments.filter(
-            (doc) =>
+          const validUpdatedDocuments = updatedDocuments.documents.filter(
+            (doc: Document) =>
               doc.id && doc.id !== "undefined" && doc.name && doc.name.trim() !== "" && doc.name !== "Unnamed Document",
           )
 
-          console.log("[DOCUMENT LIST] Received valid updated documents:", validUpdatedDocuments.length)
-
-          // Log status changes for debugging
-          validUpdatedDocuments.forEach((doc) => {
-            const existing = localDocuments.find((d) => d.id === doc.id)
-            if (existing && existing.status !== doc.status) {
-              console.log("[DOCUMENT LIST] Status changed:", {
-                id: doc.id,
-                name: doc.name,
-                oldStatus: existing.status,
-                newStatus: doc.status,
-                chunks: doc.chunkCount,
-              })
-            }
-          })
-
           setLocalDocuments(validUpdatedDocuments)
 
-          // Stop polling if no valid documents are still processing
           const stillProcessing = validUpdatedDocuments.filter(
-            (doc) => doc.status === "processing" || doc.status === "uploaded",
+            (doc: Document) => doc.status === "processing" || doc.status === "uploaded",
           )
 
           if (stillProcessing.length === 0) {
-            console.log("[DOCUMENT LIST] All valid documents processed, stopping polling")
             clearInterval(interval)
           }
-        } else {
-          console.error("[DOCUMENT LIST] Polling failed with status:", response.status)
         }
       } catch (error) {
-        console.error("[DOCUMENT LIST] Error polling document status:", error)
+        console.error("Error polling document status:", error)
       }
     }, 3000)
 
-    return () => {
-      console.log("[DOCUMENT LIST] Cleaning up polling interval")
-      clearInterval(interval)
-    }
+    return () => clearInterval(interval)
   }, [localDocuments])
 
   const handleDelete = async () => {
@@ -131,7 +102,6 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
         throw new Error("Failed to delete document")
       }
 
-      // Remove document from local state
       setLocalDocuments((prev) => prev.filter((doc) => doc.id !== selectedDocument.id))
 
       toast({
@@ -153,11 +123,12 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
   const handleRefresh = async (docId: string) => {
     setIsRefreshing(true)
     try {
-      const response = await fetch(`/api/documents/process?id=${docId}`, {
+      const response = await fetch("/api/documents/process", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({ documentId: docId }),
         credentials: "include",
       })
 
@@ -170,7 +141,6 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
         description: "Document processing has been restarted.",
       })
 
-      // Update document status locally
       setLocalDocuments((prev) => prev.map((doc) => (doc.id === docId ? { ...doc, status: "processing" } : doc)))
     } catch (error) {
       toast({
@@ -229,7 +199,7 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the document and all associated vectors.
+              This will permanently delete the document "{selectedDocument?.name}" and all associated vectors.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -1,24 +1,15 @@
-/**
- * Purpose: Chat window component
- * Logic:
- * - Manages chat state using useChat hook
- * - Renders chat messages and input
- * - Handles error states and loading
- * Runtime context: Client Component
- * Services: OpenAI (via AI SDK)
- */
 "use client"
 
 import { useRef, useEffect } from "react"
 import { useChat } from "ai/react"
 import { ChatInput } from "./chat-input"
 import { ChatMessage } from "./chat-message"
-import { Card, CardContent, CardFooter } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Card, CardContent, CardFooter } from "../../../components/ui/card"
+import { Skeleton } from "../../../components/ui/skeleton"
+import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert"
 import { AlertCircle, Bot } from "lucide-react"
 import { ErrorBoundary, useErrorBoundaryWithToast } from "../ui/error-boundary"
-import { Button } from "@/components/ui/button"
+import { Button } from "../../../components/ui/button"
 
 // Separate the chat content into its own component to be wrapped by ErrorBoundary
 function ChatContent() {

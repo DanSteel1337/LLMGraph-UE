@@ -3,41 +3,45 @@
 import type React from "react"
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "../../lib/auth-client"
 import { Header } from "../components/layout/header"
 import { Sidebar } from "../components/layout/sidebar"
-import { useAuth } from "../components/auth/auth-provider"
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { user, loading } = useAuth()
+  const { user, loading, isInitialized } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    // Simple auth check for single-user access
-    if (!loading && !user) {
+    if (isInitialized && !loading && !user) {
       router.push("/auth/login")
     }
-  }, [user, loading, router])
+  }, [user, loading, isInitialized, router])
 
-  // Show loading while checking auth
-  if (loading) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>
+  if (loading || !isInitialized) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+          <p className="mt-2 text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    )
   }
 
-  // Redirect if not authenticated
   if (!user) {
-    return <div className="flex h-screen items-center justify-center">Redirecting to login...</div>
+    return null // Will redirect to login
   }
 
   return (
-    <div className="flex h-screen flex-col">
-      <Header />
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto p-4">{children}</main>
+    <div className="flex h-screen">
+      <Sidebar />
+      <div className="flex flex-1 flex-col">
+        <Header />
+        <main className="flex-1 overflow-auto p-6">{children}</main>
       </div>
     </div>
   )
