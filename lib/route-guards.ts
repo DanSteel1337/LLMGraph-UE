@@ -1,178 +1,158 @@
+/**
+ * Route Guards for Authentication
+ *
+ * Purpose: Protect routes based on authentication state
+ * Pattern: Hooks that check auth and handle redirects
+ *
+ * IMPORTANT: This file must remain .ts (not .tsx) to avoid import issues
+ * JSX components are imported from separate .tsx files
+ */
 "use client"
 
-import { useAuth } from "./auth-singleton"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useAuth } from "./auth-singleton"
 
-// ✅ GLOBAL REDIRECT TRACKING - Prevents multiple redirects
-let globalRedirectState = {
-  isRedirecting: false,
-  lastRedirect: "",
-  redirectCount: 0,
-}
+// Replace this line:
+// export { AuthGuardLoading } from "../app/components/ui/auth-loading"
 
-// ✅ SAFE NAVIGATION HELPER
-function safeNavigate(router: ReturnType<typeof useRouter>, path: string, reason: string) {
-  // Prevent multiple redirects
-  if (globalRedirectState.isRedirecting) {
-    console.log(`[NAVIGATION] Blocked redirect to ${path} - already redirecting`)
-    return false
-  }
+// With this import statement:
+import AuthGuardLoading from "../app/components/ui/auth-loading"
+export { AuthGuardLoading }
 
-  // Prevent redirect loops
-  if (globalRedirectState.lastRedirect === path) {
-    console.log(`[NAVIGATION] Blocked redirect to ${path} - same as last redirect`)
-    return false
-  }
+// ✅ NAVIGATION STATE - Prevents redirect loops
+let isNavigating = false
+let lastNavigationTarget: string | null = null
+let navigationTimeout: NodeJS.Timeout | null = null
 
-  // Prevent too many redirects
-  if (globalRedirectState.redirectCount > 3) {
-    console.error(`[NAVIGATION] Blocked redirect to ${path} - too many redirects`)
-    return false
-  }
-
-  console.log(`[NAVIGATION] Safe redirect to ${path} - ${reason}`)
-
-  globalRedirectState.isRedirecting = true
-  globalRedirectState.lastRedirect = path
-  globalRedirectState.redirectCount++
-
-  // Use replace to avoid history pollution
-  router.replace(path)
-
-  // Reset redirect state after navigation
-  setTimeout(() => {
-    globalRedirectState.isRedirecting = false
-  }, 1000)
-
-  return true
-}
-
-// ✅ RESET REDIRECT STATE - Call when navigation completes
+// ✅ RESET NAVIGATION STATE - Call this when navigation completes
 export function resetNavigationState() {
-  globalRedirectState = {
-    isRedirecting: false,
-    lastRedirect: "",
-    redirectCount: 0,
+  isNavigating = false
+  lastNavigationTarget = null
+  if (navigationTimeout) {
+    clearTimeout(navigationTimeout)
+    navigationTimeout = null
   }
-  console.log("[NAVIGATION] State reset")
 }
 
-// ✅ AUTH GUARD HOOK - Handles auth-based redirects safely
-export function useAuthGuard(
-  options: {
-    requireAuth?: boolean
-    redirectTo?: string
-    allowedRoles?: string[]
-  } = {},
-) {
-  const { requireAuth = true, redirectTo } = options
+// ✅ SAFE NAVIGATION - Prevents multiple redirects
+function safeNavigate(router: ReturnType<typeof useRouter>, target: string) {
+  // Prevent duplicate navigation
+  if (isNavigating && lastNavigationTarget === target) {
+    console.log("[ROUTE GUARD] Already navigating to:", target)
+    return
+  }
+
+  // Prevent navigation loops
+  if (window.location.pathname === target) {
+    console.log("[ROUTE GUARD] Already at target:", target)
+    return
+  }
+
+  console.log("[ROUTE GUARD] Navigating to:", target)
+  isNavigating = true
+  lastNavigationTarget = target
+
+  // Set timeout to reset navigation state
+  if (navigationTimeout) clearTimeout(navigationTimeout)
+  navigationTimeout = setTimeout(() => {
+    resetNavigationState()
+  }, 5000) // Reset after 5 seconds if navigation doesn't complete
+
+  router.push(target)
+}
+
+/**
+ * Protected Route Guard
+ * Use this for routes that require authentication
+ *
+ * @param redirectTo - Where to redirect unauthenticated users
+ * @returns { shouldRender, isLoading, user, navigate }
+ */
+export function useProtectedRoute(redirectTo = "/auth/login") {
   const { user, loading, isInitialized } = useAuth()
   const router = useRouter()
-  const hasCheckedAuth = useRef(false)
   const [shouldRender, setShouldRender] = useState(false)
-  const { navigate } = useNavigate()
-
-  const navigateWithAuth = (path: string, requireAuth = true) => {
-    const { user } = useAuth()
-
-    if (requireAuth && !user) {
-      return safeNavigate(router, "/auth/login", "Auth required for navigation")
-    }
-
-    if (!requireAuth && user) {
-      return safeNavigate(router, "/dashboard", "Already authenticated")
-    }
-
-    return safeNavigate(router, path, "Conditional navigation")
-  }
 
   useEffect(() => {
-    // ✅ WAIT FOR AUTH INITIALIZATION
+    // Wait for auth to initialize
     if (!isInitialized || loading) {
+      console.log("[PROTECTED ROUTE] Waiting for auth initialization")
+      return
+    }
+
+    // Check authentication
+    if (!user) {
+      console.log("[PROTECTED ROUTE] No user, redirecting to:", redirectTo)
       setShouldRender(false)
-      return
+      safeNavigate(router, redirectTo)
+    } else {
+      console.log("[PROTECTED ROUTE] User authenticated:", user.email)
+      setShouldRender(true)
+      resetNavigationState() // Clear navigation state when auth is confirmed
     }
-
-    // ✅ PREVENT MULTIPLE CHECKS
-    if (hasCheckedAuth.current) {
-      return
-    }
-
-    hasCheckedAuth.current = true
-
-    // ✅ AUTH REQUIRED BUT NO USER
-    if (requireAuth && !user) {
-      const targetPath = redirectTo || "/auth/login"
-      const success = navigate(targetPath, "Auth required")
-      if (success) {
-        setShouldRender(false)
-      }
-      return
-    }
-
-    // ✅ NO AUTH REQUIRED BUT USER EXISTS
-    if (!requireAuth && user) {
-      const targetPath = redirectTo || "/dashboard"
-      const success = navigate(targetPath, "Already authenticated")
-      if (success) {
-        setShouldRender(false)
-      }
-      return
-    }
-
-    // ✅ AUTH STATE MATCHES REQUIREMENTS
-    setShouldRender(true)
-    console.log(`[AUTH GUARD] Rendering allowed - requireAuth: ${requireAuth}, hasUser: ${!!user}`)
-  }, [isInitialized, loading, user, requireAuth, redirectTo]) // ✅ NO ROUTER DEPENDENCY
+  }, [user, loading, isInitialized, router, redirectTo])
 
   return {
-    shouldRender,
-    isLoading: !isInitialized || loading,
+    shouldRender: shouldRender && !loading && !!user,
+    isLoading: loading || !isInitialized,
     user,
-    isAuthenticated: !!user,
-    navigate,
-    navigateWithAuth,
+    navigate: (path: string) => safeNavigate(router, path),
   }
 }
 
-// ✅ PROTECTED ROUTE WRAPPER
-export function useProtectedRoute(redirectTo = "/auth/login") {
-  return useAuthGuard({ requireAuth: true, redirectTo })
-}
-
-// ✅ PUBLIC ROUTE WRAPPER (redirects authenticated users)
+/**
+ * Public Route Guard
+ * Use this for routes that should redirect authenticated users
+ *
+ * @param redirectTo - Where to redirect authenticated users
+ * @returns { shouldRender, isLoading, user, navigate }
+ */
 export function usePublicRoute(redirectTo = "/dashboard") {
-  return useAuthGuard({ requireAuth: false, redirectTo })
+  const { user, loading, isInitialized } = useAuth()
+  const router = useRouter()
+  const [shouldRender, setShouldRender] = useState(false)
+
+  useEffect(() => {
+    // Wait for auth to initialize
+    if (!isInitialized || loading) {
+      console.log("[PUBLIC ROUTE] Waiting for auth initialization")
+      return
+    }
+
+    // Check authentication
+    if (user) {
+      console.log("[PUBLIC ROUTE] User authenticated, redirecting to:", redirectTo)
+      setShouldRender(false)
+      safeNavigate(router, redirectTo)
+    } else {
+      console.log("[PUBLIC ROUTE] No user, showing public page")
+      setShouldRender(true)
+      resetNavigationState() // Clear navigation state when showing public page
+    }
+  }, [user, loading, isInitialized, router, redirectTo])
+
+  return {
+    shouldRender: shouldRender && !loading && !user,
+    isLoading: loading || !isInitialized,
+    user,
+    navigate: (path: string) => safeNavigate(router, path),
+  }
 }
 
-// ✅ MANUAL NAVIGATION HELPER
-export function useNavigate() {
+/**
+ * Optional Auth Route
+ * Use this for routes that work with or without authentication
+ *
+ * @returns { isLoading, user, navigate }
+ */
+export function useOptionalAuth() {
+  const { user, loading, isInitialized } = useAuth()
   const router = useRouter()
 
-  const navigate = (path: string, reason = "Manual navigation") => {
-    return safeNavigate(router, path, reason)
-  }
-
-  return { navigate }
-}
-
-// ✅ LOADING COMPONENT FOR GUARDS
-export function AuthGuardLoading() {
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-        <p className="mt-2 text-sm text-gray-600">Checking authentication...</p>
-      </div>
-    </div>
-  )
-}
-
-// ✅ DEBUG HELPER
-export function getNavigationState() {
   return {
-    ...globalRedirectState,
-    timestamp: new Date().toISOString(),
+    isLoading: loading || !isInitialized,
+    user,
+    navigate: (path: string) => safeNavigate(router, path),
   }
 }
