@@ -34,6 +34,7 @@ export function useAuth() {
   const [loading, setLoading] = useState(true)
   const [isInitialized, setIsInitialized] = useState(false)
   const initRef = useRef(false)
+  const redirectRef = useRef(false)
 
   // Sign in function
   const signIn = useCallback(async (email: string, password: string) => {
@@ -64,6 +65,7 @@ export function useAuth() {
       const supabase = getBrowserClient()
       await supabase.auth.signOut()
       setUser(null)
+      redirectRef.current = false
       window.location.href = "/auth/login"
     } catch (error) {
       console.error("Sign out error:", error)
@@ -84,13 +86,14 @@ export function useAuth() {
         const {
           data: { user: initialUser },
         } = await supabase.auth.getUser()
+
         setUser(initialUser)
         setIsInitialized(true)
+        setLoading(false)
       } catch (error) {
         console.error("Auth initialization error:", error)
         setUser(null)
         setIsInitialized(true)
-      } finally {
         setLoading(false)
       }
     }
@@ -103,9 +106,12 @@ export function useAuth() {
       setUser(session?.user ?? null)
       setLoading(false)
 
-      if (event === "SIGNED_IN") {
+      // Prevent multiple redirects
+      if (event === "SIGNED_IN" && !redirectRef.current) {
+        redirectRef.current = true
         window.location.href = "/dashboard"
-      } else if (event === "SIGNED_OUT") {
+      } else if (event === "SIGNED_OUT" && !redirectRef.current) {
+        redirectRef.current = true
         window.location.href = "/auth/login"
       }
     })

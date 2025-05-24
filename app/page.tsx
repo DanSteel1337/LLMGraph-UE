@@ -1,23 +1,26 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "../components/ui/button"
 import Link from "next/link"
 import { useAuth } from "../lib/auth-client"
 
 export default function LandingPage() {
-  const { user, loading } = useAuth()
+  const { user, loading, isInitialized } = useAuth()
   const router = useRouter()
+  const [hasRedirected, setHasRedirected] = useState(false)
 
   useEffect(() => {
-    if (!loading && user) {
-      router.push("/dashboard")
+    // Only redirect once when fully initialized and user exists
+    if (isInitialized && !loading && user && !hasRedirected) {
+      setHasRedirected(true)
+      router.replace("/dashboard")
     }
-  }, [user, loading, router])
+  }, [isInitialized, loading, user, hasRedirected, router])
 
-  // Show loading while checking auth
-  if (loading) {
+  // Show loading while auth is initializing
+  if (!isInitialized || loading) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
@@ -28,7 +31,7 @@ export default function LandingPage() {
     )
   }
 
-  // Only show landing page if not authenticated
+  // Only show landing page if definitely not authenticated
   if (!user) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center p-4">
@@ -50,5 +53,6 @@ export default function LandingPage() {
     )
   }
 
+  // Return null while redirecting to prevent flash
   return null
 }
