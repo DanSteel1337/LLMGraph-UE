@@ -7,24 +7,32 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  
+  // Server Actions are enabled by default in Next.js 13.4+
+  // No need for experimental.serverActions anymore
   experimental: {
-    serverActions: {
-      enabled: true,
-    },
+    // Remove serverActions - it's stable now
+    // Remove allowedBuildScripts - not a valid Next.js option
   },
-  // Moved from experimental.serverComponentsExternalPackages to root-level serverExternalPackages
+  
+  // serverExternalPackages is correct for Next.js 13+
   serverExternalPackages: ["sharp"],
+  
   eslint: {
     ignoreDuringBuilds: true,
   },
+  
   typescript: {
     ignoreBuildErrors: true,
   },
+  
   images: {
     unoptimized: true,
   },
+  
   // Generate source maps in production for better debugging
   productionBrowserSourceMaps: process.env.NEXT_PUBLIC_DEBUG === "true",
+  
   webpack: (config, { isServer, nextRuntime, dev }) => {
     // General polyfills for Edge Runtime
     if (nextRuntime === "edge") {
@@ -71,21 +79,18 @@ const nextConfig = {
       if (!dev && process.env.NEXT_PUBLIC_DEBUG === "true") {
         config.optimization.minimizer.forEach((minimizer) => {
           if (minimizer.constructor.name === "TerserPlugin") {
-            minimizer.options.minimizer.options.compress.drop_console = false
-            minimizer.options.minimizer.options.compress.pure_funcs = []
+            minimizer.options.terserOptions = {
+              compress: {
+                drop_console: false,
+                pure_funcs: [],
+              },
+            }
           }
         })
       }
     }
 
     return config
-  },
-  experimental: {
-    serverActions: {
-      enabled: true,
-    },
-    // Allow sharp to run build scripts
-    allowedBuildScripts: ["sharp"],
   },
 }
 
