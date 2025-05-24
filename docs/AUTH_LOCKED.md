@@ -2,98 +2,164 @@
 
 ## Overview
 
-LLMGraph-UE implements a **singleton authentication pattern** that ensures zero duplication and maximum security across the entire application.
+LLMGraph-UE implements a **simplified authentication pattern** with a single `lib/auth.ts` file that handles both server and client authentication needs.
 
 ## Architecture
 
-### **Server-Side Authentication (`lib/auth.ts`)**
-- **Purpose**: API route authentication
-- **Pattern**: `validateAuth()` → `unauthorizedResponse()`
+### **Single Authentication File (`lib/auth.ts`)**
+
+- **Purpose**: All authentication operations
+- **Exports**: 6 core functions only
 - **Runtime**: Edge Runtime compatible
-- **No "use client"**: Server-side only
+- **Pattern**: Clean, simple, maintainable
 
-\`\`\`typescript
-// Every API route follows this exact pattern
-const { user, error } = await validateAuth()
-if (error) return unauthorizedResponse()
-\`\`\`
+```typescript
+// Core exports
+export function getSupabaseClient()      // Browser client singleton
+export async function getSupabaseServer() // Server client with cookies
+export async function requireAuth()       // Throws if unauthorized
+export async function signIn()            // Email/password login
+export async function signOut()           // Clear session
+export async function getCurrentUser()    // Get current user
+```
 
-### **Client-Side Authentication (`lib/auth-client.ts`)**
-- **Purpose**: React component authentication
-- **Pattern**: `useAuth()` hook
-- **Features**: State management, sign in/out, session handling
-- **Singleton**: Browser client instance reused
+### **Client-Side Hook (`lib/hooks/use-auth.ts`)**
 
-\`\`\`typescript
-// Every client component uses this hook
-const { user, loading, signIn, signOut } = useAuth()
-\`\`\`
+- **Purpose**: React component state management
+- **Pattern**: Standard React hook
+- **Features**: User state, loading state, auth listeners
+
+```typescript
+// Components use this hook for auth state
+const { user, loading } = useAuth()
+```
 
 ## Key Principles
 
 ### **1. Single Source of Truth**
-- **Server**: Only `lib/auth.ts` for API routes
-- **Client**: Only `lib/auth-client.ts` for components
-- **Zero Duplication**: No other auth files exist
+- **One File**: All auth logic in `lib/auth.ts`
+- **No Duplication**: No auth-client.ts, supabase.ts, etc.
+- **Clear Exports**: Only 6 functions, no helpers exported
 
 ### **2. Consistent Patterns**
-- **API Routes**: Always `validateAuth()` first
-- **Components**: Always `useAuth()` hook
-- **Error Handling**: Standardized responses
+- **API Routes**: `try { await requireAuth() } catch { return 401 }`
+- **Components**: `useAuth()` hook for state, direct imports for actions
+- **Error Handling**: requireAuth throws, routes handle response
 
 ### **3. Edge Runtime Compatibility**
-- **Relative Imports**: No `@/` aliases in server code
-- **Cookie Handling**: Proper SSR cookie management
-- **Performance**: Optimized for Edge Runtime
+- **API Routes**: Relative imports only `../../../lib/auth`
+- **Components**: Can use aliases `@/lib/auth`
+- **No Node.js**: Pure Edge Runtime compatible
 
-### **4. Security**
-- **Session Validation**: Every request validated
-- **Proper Logout**: Complete session cleanup
-- **Error Boundaries**: Graceful failure handling
+### **4. Simplicity**
+- **No Providers**: No AuthProvider or context
+- **No Complex State**: Supabase handles via cookies
+- **Minimal Code**: ~150 lines total
 
 ## Implementation Details
 
 ### **API Route Pattern**
-\`\`\`typescript
-import { validateAuth, unauthorizedResponse } from "../../../lib/auth"
+
+```typescript
+import { requireAuth } from "../../../lib/auth"
+
+export const runtime = "edge"
 
 export async function POST(request: Request) {
-  // Always validate auth first
-  const { user, error } = await validateAuth()
-  if (error) return unauthorizedResponse()
-  
-  // Your route logic here
+  try {
+    // Simple auth check - throws if unauthorized
+    const user = await requireAuth()
+    
+    // Your route logic here
+    return Response.json({ data })
+    
+  } catch (error) {
+    // Consistent error response
+    return new Response(
+      JSON.stringify({ error: "Unauthorized" }),
+      { 
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      }
+    )
+  }
 }
-\`\`\`
+```
 
 ### **Component Pattern**
-\`\`\`typescript
-import { useAuth } from "../../lib/auth-client"
+
+```typescript
+// For auth state in components
+import { useAuth } from "@/lib/hooks/use-auth"
 
 export function MyComponent() {
-  const { user, loading, signOut } = useAuth()
+  const { user, loading } = useAuth()
   
-  if (loading) return <Loading />
-  if (!user) return <Redirect />
+  if (loading) return <Skeleton />
+  if (!user) return <Redirect to="/auth/login" />
   
-  // Your component logic here
+  return <div>Welcome {user.email}</div>
 }
-\`\`\`
+```
 
-## Migration Notes
+```typescript
+// For auth actions in components
+import { signIn, signOut } from "@/lib/auth"
 
-### **Removed Files**
-- ❌ `lib/supabase.ts` - Replaced by auth singletons
-- ❌ `lib/supabase-server.ts` - Replaced by auth singletons  
-- ❌ `app/components/auth/auth-provider.tsx` - Replaced by client hook
+export function LoginForm() {
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    const { error } = await signIn(email, password)
+    if (!error) router.push("/dashboard")
+  }
+  
+  return <form onSubmit={handleSubmit}>...</form>
+}
+```
+
+## File Structure
+
+```
+lib/
+├── auth.ts              # Single auth file (6 exports only)
+└── hooks/
+    └── use-auth.ts      # Client-side auth state hook
+
+app/
+├── api/
+│   └── */route.ts       # All use requireAuth() pattern
+├── components/
+│   └── auth/
+│       └── auth-form.tsx # Uses signIn from lib/auth
+└── auth/
+    └── login/
+        └── page.tsx      # Simple login page
+```
+
+## Migration from Complex Auth
+
+### **Deleted Files**
+- ❌ `lib/auth-client.ts` - Merged into auth.ts
+- ❌ `lib/auth-singleton.ts` - Merged into auth.ts
+- ❌ `lib/supabase.ts` - Merged into auth.ts
+- ❌ `lib/supabase-server.ts` - Merged into auth.ts
+- ❌ `lib/route-guards.ts` - Not needed
+- ❌ `app/auth/callback/route.ts` - Not needed for email auth
+- ❌ All auth providers and contexts - Not needed
 
 ### **Updated Patterns**
-- ✅ All API routes use `validateAuth()`
-- ✅ All components use `useAuth()` hook
-- ✅ Consistent error handling
-- ✅ Edge Runtime compatibility
+- ✅ All API routes use `requireAuth()` with try-catch
+- ✅ Components use `useAuth()` hook for state
+- ✅ Components import actions directly from `lib/auth`
+- ✅ No complex providers or contexts
+- ✅ Edge Runtime compatible throughout
 
-This architecture ensures **zero auth logic duplication** while maintaining **maximum security** and **optimal performance**.
-\`\`\`
+## Benefits
 
-### **Step 5: Update Pinecone Documentation**
+1. **Simplicity**: One file, 6 functions, ~150 lines total
+2. **Maintainability**: Single source of truth
+3. **Performance**: Edge Runtime optimized
+4. **Security**: Consistent auth checks
+5. **Developer Experience**: Clear, predictable patterns
+
+This architecture provides **maximum simplicity** while maintaining **security** and **Edge Runtime compatibility** for a single-user admin dashb

@@ -1,13 +1,12 @@
 import { kv } from "@vercel/kv"
-import { validateAuth, unauthorizedResponse } from "../../../lib/auth"
+import { requireAuth } from "../../../lib/auth"
 
 export const runtime = "edge"
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // Single source of truth auth validation
-    const { user, error } = await validateAuth()
-    if (error) return unauthorizedResponse()
+    await requireAuth()
 
     // Get settings from KV store
     const settings = (await kv.get("app:settings")) || {}
@@ -15,6 +14,15 @@ export async function GET() {
     return Response.json({ settings })
   } catch (error) {
     console.error("Settings GET error:", error)
+
+    // Check if this is an auth error
+    if (error instanceof Error && error.message.includes("Authentication")) {
+      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
     return Response.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -22,8 +30,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     // Single source of truth auth validation
-    const { user, error } = await validateAuth()
-    if (error) return unauthorizedResponse()
+    await requireAuth()
 
     const settings = await request.json()
 
@@ -33,6 +40,15 @@ export async function POST(request: Request) {
     return Response.json({ success: true })
   } catch (error) {
     console.error("Settings POST error:", error)
+
+    // Check if this is an auth error
+    if (error instanceof Error && error.message.includes("Authentication")) {
+      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
     return Response.json({ error: "Internal server error" }, { status: 500 })
   }
 }

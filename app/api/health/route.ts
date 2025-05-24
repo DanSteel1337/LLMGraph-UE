@@ -1,42 +1,24 @@
-import { validateEnv } from "../../../lib/utils/env"
-import { validateAuth, unauthorizedResponse } from "../../../lib/auth"
+import { NextResponse } from "next/server"
 
 export const runtime = "edge"
 
+// Health check endpoint - intentionally public, no auth required
 export async function GET() {
   try {
-    // Single source of truth auth validation
-    const { user, error } = await validateAuth()
-    if (error) return unauthorizedResponse()
-
-    // Validate environment
-    const envResult = validateEnv(["openai", "pinecone", "supabase", "blob"])
-
     const healthStatus = {
-      status: "healthy",
+      status: "ok",
       timestamp: new Date().toISOString(),
-      environment: envResult.isValid ? "configured" : "missing_vars",
-      user: {
-        id: user.id,
-        email: user.email,
-      },
-      services: {
-        openai: !!process.env.OPENAI_API_KEY,
-        pinecone: !!(process.env.PINECONE_API_KEY && process.env.PINECONE_INDEX_NAME),
-        supabase: !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
-        vercel_blob: !!process.env.BLOB_READ_WRITE_TOKEN,
-        vercel_kv: !!process.env.KV_REST_API_URL,
-      },
+      version: process.env.NEXT_PUBLIC_APP_VERSION || "development",
+      environment: process.env.NODE_ENV,
     }
 
-    return Response.json(healthStatus)
+    return NextResponse.json(healthStatus)
   } catch (error) {
-    console.error("Health check error:", error)
-    return Response.json(
+    console.error("[HEALTH] Error:", error)
+    return NextResponse.json(
       {
-        status: "unhealthy",
-        timestamp: new Date().toISOString(),
-        error: error instanceof Error ? error.message : "Unknown error",
+        status: "error",
+        message: error instanceof Error ? error.message : "Health check failed",
       },
       { status: 500 },
     )

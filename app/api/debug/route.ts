@@ -1,17 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { validateEnv } from "../../../lib/utils/env"
-import { validateAuth, unauthorizedResponse } from "../../../lib/auth"
+import { requireAuth } from "../../../lib/auth"
 
 export const runtime = "edge"
 
 export async function GET(request: NextRequest) {
   try {
-    // Validate environment
-    validateEnv(["SUPABASE", "VERCEL_KV"])
-
     // Single source of truth auth validation
-    const { user, error } = await validateAuth()
-    if (error) return unauthorizedResponse()
+    const user = await requireAuth()
 
     // Get debug information
     const debugInfo = {
@@ -48,6 +43,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(debugInfo)
   } catch (error) {
     console.error("[DEBUG API] Error:", error)
+
+    // Check if this is an auth error
+    if (error instanceof Error && error.message.includes("Authentication")) {
+      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
     return NextResponse.json(
       {
         error: "Internal Server Error",

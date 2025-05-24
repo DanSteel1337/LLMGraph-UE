@@ -101,7 +101,7 @@ llmgraph-ue/
 │   ├── card.tsx                   # Card component
 │   ├── tabs.tsx                   # Tabs component
 │   ├── skeleton.tsx               # Loading skeleton
-│   ├── progress.tsx               # Progress bar
+│   ���── progress.tsx               # Progress bar
 │   ├── label.tsx                  # Form label
 │   ├── toast.tsx                  # Toast notification
 │   └── toaster.tsx                # Toast container

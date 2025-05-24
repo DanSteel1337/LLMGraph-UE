@@ -1,4 +1,4 @@
-import { validateAuth, unauthorizedResponse } from "../../../lib/auth"
+import { requireAuth } from "../../../lib/auth"
 import { createEmbedding } from "../../../lib/ai/embeddings"
 import { searchVectors } from "../../../lib/pinecone/search"
 import { validateEnv } from "../../../lib/utils/env"
@@ -14,8 +14,7 @@ export async function POST(request: Request) {
     }
 
     // Single source of truth auth validation
-    const { user, error } = await validateAuth()
-    if (error) return unauthorizedResponse()
+    const user = await requireAuth()
 
     const { query, limit = 5 } = await request.json()
 
@@ -32,6 +31,15 @@ export async function POST(request: Request) {
     return Response.json({ results })
   } catch (error) {
     console.error("Search API error:", error)
+
+    // Check if this is an auth error
+    if (error instanceof Error && error.message.includes("Authentication")) {
+      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
     return Response.json({ error: "Internal server error" }, { status: 500 })
   }
 }

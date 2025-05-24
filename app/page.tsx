@@ -2,46 +2,38 @@
 
 import { Button } from "../components/ui/button"
 import Link from "next/link"
-import { usePublicRoute, AuthGuardLoading, resetNavigationState } from "../lib/route-guards"
-import { useEffect } from "react"
+import { useAuth } from "../lib/hooks/use-auth"
+import { Loader2 } from "lucide-react"
 
 export default function LandingPage() {
-  // ✅ USE PUBLIC ROUTE GUARD - Handles all auth logic safely
-  const { shouldRender, isLoading, user, navigate } = usePublicRoute("/dashboard")
+  const { user, isLoading } = useAuth()
 
-  // ✅ RESET NAVIGATION STATE ON MOUNT - Prevents stale redirects
-  useEffect(() => {
-    resetNavigationState()
-    console.log("[LANDING] Page mounted, navigation state reset")
-  }, []) // ✅ NO DEPENDENCIES - Runs once only
-
-  // ✅ LOADING STATE - Show while checking auth
+  // Show loading state
   if (isLoading) {
-    console.log("[LANDING] Loading auth state...")
-    return <AuthGuardLoading />
-  }
-
-  // ✅ AUTHENTICATED USER - Route guard handles redirect
-  if (!shouldRender) {
-    console.log("[LANDING] User authenticated, route guard handling redirect")
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-          <p className="mt-2 text-sm text-gray-600">Redirecting to dashboard...</p>
-        </div>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
 
-  // ✅ UNAUTHENTICATED USER - Show landing page
-  console.log("[LANDING] Showing landing page for unauthenticated user")
+  // If authenticated, redirect to dashboard
+  if (user) {
+    window.location.href = "/dashboard"
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2">Redirecting to dashboard...</span>
+      </div>
+    )
+  }
 
+  // Show landing page for unauthenticated users
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="flex min-h-screen flex-col items-center justify-center p-4">
         <div className="w-full max-w-md space-y-8 text-center">
-          {/* ✅ HEADER SECTION */}
+          {/* HEADER SECTION */}
           <div className="space-y-4">
             <div className="mx-auto h-16 w-16 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
               <svg className="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -58,7 +50,7 @@ export default function LandingPage() {
             <p className="text-lg text-gray-500">for UE5.4 API Documentation</p>
           </div>
 
-          {/* ✅ FEATURES SECTION */}
+          {/* FEATURES SECTION */}
           <div className="space-y-4">
             <div className="grid gap-4 text-left">
               <div className="flex items-start space-x-3">
@@ -111,7 +103,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* ✅ CTA SECTION */}
+          {/* CTA SECTION */}
           <div className="space-y-4">
             <Button asChild size="lg" className="w-full h-12 text-lg">
               <Link href="/auth/login">Get Started</Link>
@@ -119,21 +111,6 @@ export default function LandingPage() {
 
             <p className="text-xs text-gray-400">Powered by Next.js 15, OpenAI GPT-4o, and Pinecone</p>
           </div>
-
-          {/* ✅ DEBUG INFO (only in development) */}
-          {process.env.NODE_ENV === "development" && (
-            <div className="mt-8 p-4 bg-gray-100 rounded-lg text-left">
-              <p className="text-xs font-mono text-gray-600">
-                Debug: Landing page rendered
-                <br />
-                User: {user ? user.email : "None"}
-                <br />
-                Should render: {shouldRender.toString()}
-                <br />
-                Loading: {isLoading.toString()}
-              </p>
-            </div>
-          )}
         </div>
       </div>
     </div>
