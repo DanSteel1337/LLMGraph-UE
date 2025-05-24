@@ -1,18 +1,5 @@
 /**
- * Document Processing API Route
- *
- * Purpose: Processes uploaded documents into vector embeddings with streaming progress
- *
- * Features:
- * - Fetches document content from Blob storage
- * - Chunks document into semantic segments
- * - Generates embeddings using OpenAI text-embedding-3-large
- * - Stores vectors in Pinecone with rich metadata
- * - Streams real-time progress updates to the client
- * - Handles errors with detailed error messages
- *
- * Security: Requires valid Supabase authentication
- * Runtime: Vercel Edge Runtime for optimal performance
+ * Document Processing API Route - Simplified and Robust
  */
 
 import { type NextRequest, NextResponse } from "next/server"
@@ -40,13 +27,11 @@ function createStream() {
 }
 
 export async function POST(request: NextRequest) {
-  // Add debug logging
   debug.group("Document Processing API")
   debug.log("Processing request started")
 
-  // Validate only the environment variables needed for this route
   try {
-    validateEnv(["SUPABASE", "OPENAI", "PINECONE", "VERCEL_BLOB", "VERCEL_KV"])
+    validateEnv(["SUPABASE", "VERCEL_BLOB", "VERCEL_KV"])
     debug.log("Environment variables validated")
   } catch (error) {
     debug.error("Environment validation failed:", error)
@@ -57,7 +42,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Validate authentication using edge client
+    // Validate authentication
     const supabase = createEdgeClient()
     const { data, error } = await supabase.auth.getUser()
     debug.log("Auth check result:", error ? "Failed" : "Success")
@@ -101,7 +86,7 @@ export async function POST(request: NextRequest) {
     const { stream, write, close } = createStream()
 
     // Process document in the background
-    processInBackground(documentId, document.url, document.type, write, close).catch((error) => {
+    processDocumentSimple(documentId, document.url, document.type, write, close).catch((error) => {
       debug.error(`Error processing document ${documentId}:`, error)
       write({
         type: "error",
@@ -136,17 +121,15 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function processInBackground(
+async function processDocumentSimple(
   documentId: string,
   url: string,
   type: string,
   write: (message: any) => Promise<void>,
   close: () => Promise<void>,
 ) {
-  debug.group(`Background Processing: ${documentId}`)
-  debug.log("Starting background processing for document:", documentId)
-  debug.log("Document URL:", url)
-  debug.log("Document type:", type)
+  debug.group(`Simple Processing: ${documentId}`)
+  debug.log("Starting simple processing for document:", documentId)
 
   try {
     // Update document status
@@ -160,109 +143,121 @@ async function processInBackground(
       percent: 0,
       message: "Starting document processing...",
     })
-    debug.log("Sent initial progress update")
 
-    // Fetch document content from Blob
+    // Step 1: Fetch document content
     await write({
       type: "info",
       stage: "processing",
-      percent: 5,
+      percent: 20,
       message: "Fetching document content...",
     })
-    debug.log("Attempting to fetch document from Blob:", url)
 
-    // Simplified processing for now - just fetch and store content
     let content: string
+    let contentLength = 0
+
     try {
-      debug.log("Making fetch request to:", url)
+      debug.log("Fetching content from URL:", url)
+
       const response = await fetch(url, {
         method: "GET",
         headers: {
+          Accept: "text/plain, text/*, */*",
           "User-Agent": "LLMGraph-UE/1.0",
         },
       })
 
-      debug.log("Fetch response status:", response.status)
+      debug.log("Response status:", response.status)
+      debug.log("Response headers:", Object.fromEntries(response.headers.entries()))
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      if (!response.body) {
-        throw new Error("Response body is null")
-      }
-
       if (type === "application/pdf") {
-        content = "PDF content extraction not yet implemented"
-        debug.log("PDF content extraction placeholder")
+        content = "PDF processing not yet implemented"
+        contentLength = content.length
       } else {
-        content = await response.text()
-        debug.log("Text content extracted successfully, length:", content?.length || 0)
-
-        if (!content || content.length === 0) {
-          throw new Error("Document content is empty")
-        }
+        const responseText = await response.text()
+        content = responseText || ""
+        contentLength = content.length
       }
 
-      // For now, just simulate processing without calling the complex pipeline
-      await write({
-        type: "info",
-        stage: "processing",
-        percent: 50,
-        message: "Processing document content...",
-      })
+      debug.log("Content fetched successfully, length:", contentLength)
 
-      // Simulate some processing time
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      // Store basic document info
-      await kv.set(`document:${documentId}:content`, {
-        length: content.length,
-        type: type,
-        processedAt: new Date().toISOString(),
-      })
-
-      await write({
-        type: "info",
-        stage: "completed",
-        percent: 100,
-        message: "Document processing completed successfully",
-      })
-
-      // Send completion message
-      await write({
-        type: "done",
-        message: "Document processing completed successfully",
-      })
-      debug.log("Sent completion message")
+      if (contentLength === 0) {
+        throw new Error("Document appears to be empty")
+      }
     } catch (fetchError) {
-      debug.error("Error during fetch or content extraction:", fetchError)
-      throw new Error(`Failed to fetch document content: ${fetchError.message}`)
+      debug.error("Fetch error:", fetchError)
+      throw new Error(`Failed to fetch document: ${fetchError.message}`)
     }
 
-    // Close the stream
+    // Step 2: Basic content processing
+    await write({
+      type: "info",
+      stage: "processing",
+      percent: 50,
+      message: "Processing document content...",
+    })
+
+    // Simple chunking - split by paragraphs or lines
+    const chunks = content
+      .split(/\n\s*\n/)
+      .filter((chunk) => chunk.trim().length > 0)
+      .map((chunk, index) => ({
+        id: `${documentId}-chunk-${index}`,
+        content: chunk.trim(),
+        index,
+      }))
+
+    debug.log("Created chunks:", chunks.length)
+
+    // Step 3: Store processing results
+    await write({
+      type: "info",
+      stage: "processing",
+      percent: 80,
+      message: "Storing processing results...",
+    })
+
+    // Store document processing results
+    await kv.set(`document:${documentId}:chunks`, chunks.length)
+    await kv.set(`document:${documentId}:content-length`, contentLength)
+    await kv.set(`document:${documentId}:processed-at`, new Date().toISOString())
+    await kv.set(`document:${documentId}:status`, "processed")
+
+    debug.log("Processing results stored")
+
+    // Step 4: Complete
+    await write({
+      type: "info",
+      stage: "completed",
+      percent: 100,
+      message: `Document processed successfully! Created ${chunks.length} chunks.`,
+    })
+
+    await write({
+      type: "done",
+      message: "Document processing completed successfully",
+    })
+
+    debug.log("Processing completed successfully")
+  } catch (error) {
+    debug.error("Processing error:", error)
+
+    // Update status to error
+    await kv.set(`document:${documentId}:status`, "error")
+    await kv.set(`document:${documentId}:error`, error instanceof Error ? error.message : "Unknown error")
+
+    await write({
+      type: "error",
+      message: error instanceof Error ? error.message : "Processing failed",
+    })
+
+    throw error
+  } finally {
     await close()
     debug.log("Stream closed")
     debug.groupEnd()
-  } catch (error) {
-    // Update document status to error
-    await kv.set(`document:${documentId}:status`, "error")
-    await kv.set(`document:${documentId}:error`, error instanceof Error ? error.message : "Unknown error")
-    debug.error("Processing error:", error)
-
-    // Send error message
-    await write({
-      type: "error",
-      message: error instanceof Error ? error.message : "An unknown error occurred during processing",
-    })
-    debug.log("Sent error message to client")
-
-    // Close the stream
-    await close()
-    debug.log("Stream closed after error")
-    debug.groupEnd()
-
-    // Re-throw for logging
-    throw error
   }
 }
