@@ -172,27 +172,54 @@ async function processInBackground(
     })
     debug.log("Attempting to fetch document from Blob:", url)
 
-    // Directly fetch the content using fetch API instead of Vercel Blob
+    // Fetch the content using fetch API with better error handling
+    let content: string
     try {
-      const response = await fetch(url)
+      debug.log("Making fetch request to:", url)
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "User-Agent": "LLMGraph-UE/1.0",
+        },
+      })
+
+      debug.log("Fetch response status:", response.status)
+      debug.log("Fetch response headers:", Object.fromEntries(response.headers.entries()))
+
       if (!response.ok) {
-        throw new Error(`Failed to fetch document: ${response.status} ${response.statusText}`)
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      let content: string
+      // Check if response body exists
+      if (!response.body) {
+        throw new Error("Response body is null")
+      }
+
+      debug.log("Response received, extracting content...")
+
       if (type === "application/pdf") {
         // For PDF, we would use a PDF parser here
         // This is a placeholder - in a real implementation, you would use a PDF parsing library
         content = "PDF content would be extracted here"
         debug.log("PDF content extraction placeholder (not implemented)")
       } else {
-        // For text-based documents, just get the text
-        content = await response.text()
-        debug.log("Text content extracted, length:", content.length)
+        // For text-based documents, get the text with additional safety checks
+        try {
+          content = await response.text()
+          debug.log("Text content extracted successfully, length:", content?.length || 0)
+
+          if (!content || content.length === 0) {
+            throw new Error("Document content is empty")
+          }
+        } catch (textError) {
+          debug.error("Error extracting text from response:", textError)
+          throw new Error(`Failed to extract text content: ${textError.message}`)
+        }
       }
 
+      debug.log("Content extraction completed, starting processing...")
+
       // Process document with progress streaming
-      debug.log("Starting document processing with progress streaming")
       await processDocumentWithProgress(
         documentId,
         content,
@@ -215,7 +242,7 @@ async function processInBackground(
       })
       debug.log("Sent completion message")
     } catch (fetchError) {
-      debug.error("Error fetching document content:", fetchError)
+      debug.error("Error during fetch or content extraction:", fetchError)
       throw new Error(`Failed to fetch document content: ${fetchError.message}`)
     }
 
