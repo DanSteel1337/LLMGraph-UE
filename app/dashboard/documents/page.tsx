@@ -1,4 +1,3 @@
-import { CardFooter } from "@/components/ui/card"
 /**
  * Purpose: Document management page
  * Logic:
@@ -32,10 +31,10 @@ function DocumentsLoading() {
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-4 w-3/4 mt-2" />
             </CardContent>
-            <CardFooter className="flex justify-between pt-2">
+            <div className="flex justify-between pt-2 px-6 pb-6">
               <Skeleton className="h-9 w-24" />
               <Skeleton className="h-9 w-24" />
-            </CardFooter>
+            </div>
           </Card>
         ))}
     </div>
