@@ -13,33 +13,6 @@
  *
  * Security: Requires valid Supabase authentication
  * Runtime: Vercel Edge Runtime for optimal performance
- *
- * Request Format:
- * POST /api/documents/upload
- * Content-Type: multipart/form-data
- * Body: FormData with 'file' field containing the document
- *
- * Response Format:
- * {
- *   id: string,           // Generated document ID
- *   name: string,         // Original filename
- *   url: string,          // Blob storage URL
- *   status: "uploaded"    // Initial status
- * }
- *
- * Supported File Types:
- * - text/markdown (.md)
- * - text/plain (.txt)
- * - application/pdf (.pdf)
- * - text/html (.html)
- *
- * Processing Flow:
- * 1. Validate authentication and file type
- * 2. Generate unique document ID
- * 3. Upload to Vercel Blob storage
- * 4. Store metadata in KV
- * 5. Trigger background processing (non-blocking)
- * 6. Return upload confirmation
  */
 
 import { type NextRequest, NextResponse } from "next/server"
@@ -63,9 +36,6 @@ const serverDebug = (message: string, ...args: any[]) => {
 
 export async function POST(request: NextRequest) {
   serverDebug("Document upload API called")
-
-  // Log request details
-  serverDebug("Request headers:", Object.fromEntries(request.headers.entries()))
 
   // Validate only the environment variables needed for this route
   try {
@@ -197,9 +167,19 @@ export async function POST(request: NextRequest) {
       await kv.set(`document:${documentId}`, {
         id: documentId,
         name: file.name,
+        filename: file.name,
+        type: file.type,
+        fileType: file.type,
+        size: file.size,
+        fileSize: file.size,
         url: blobResult.downloadUrl,
+        uploadedAt: new Date().toISOString(),
         status: "uploaded",
         userId: data.user.id,
+        blobMetadata: {
+          pathname: blobResult.pathname,
+          contentType: blobResult.contentType,
+        },
       })
       serverDebug("Metadata stored successfully")
     } catch (kvError) {

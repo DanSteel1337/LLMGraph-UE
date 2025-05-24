@@ -13,7 +13,7 @@ interface DocumentCardProps {
   title: string
   description?: string
   createdAt: Date | string
-  status: "processing" | "indexed" | "error"
+  status: "processing" | "indexed" | "error" | "completed" | "uploaded"
   chunks?: number
   onDelete?: (id: string) => void
   onRefresh?: (id: string) => void
@@ -32,13 +32,22 @@ export function DocumentCard({
   const [isDeleting, setIsDeleting] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
+  // Enhanced logging for debugging
+  console.log("[DOCUMENT CARD] Rendering card:", {
+    id,
+    title,
+    status,
+    chunks,
+    description,
+  })
+
   const handleDelete = async () => {
     if (!onDelete) return
     setIsDeleting(true)
     try {
       onDelete(id)
     } catch (error) {
-      console.error("Error deleting document:", error)
+      console.error("[DOCUMENT CARD] Error deleting document:", error)
     } finally {
       setIsDeleting(false)
     }
@@ -50,7 +59,7 @@ export function DocumentCard({
     try {
       onRefresh(id)
     } catch (error) {
-      console.error("Error refreshing document:", error)
+      console.error("[DOCUMENT CARD] Error refreshing document:", error)
     } finally {
       setIsRefreshing(false)
     }
@@ -59,13 +68,46 @@ export function DocumentCard({
   const getStatusIcon = () => {
     switch (status) {
       case "indexed":
+      case "completed":
         return <CheckCircle className="h-4 w-4" />
       case "processing":
+      case "uploaded":
         return <RefreshCw className="h-4 w-4 animate-spin" />
       case "error":
         return <AlertCircle className="h-4 w-4" />
       default:
         return <FileText className="h-4 w-4" />
+    }
+  }
+
+  const getStatusLabel = () => {
+    switch (status) {
+      case "indexed":
+      case "completed":
+        return "Indexed"
+      case "processing":
+        return "Processing"
+      case "uploaded":
+        return "Uploaded"
+      case "error":
+        return "Error"
+      default:
+        return "Unknown"
+    }
+  }
+
+  const getStatusVariant = () => {
+    switch (status) {
+      case "indexed":
+      case "completed":
+        return "success"
+      case "processing":
+      case "uploaded":
+        return "warning"
+      case "error":
+        return "destructive"
+      default:
+        return "secondary"
     }
   }
 
@@ -99,22 +141,20 @@ export function DocumentCard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <div>
-                  <CustomBadge
-                    variant={status === "indexed" ? "success" : status === "processing" ? "warning" : "destructive"}
-                  >
+                  <CustomBadge variant={getStatusVariant()}>
                     {getStatusIcon()}
-                    <span className="ml-1">
-                      {status === "indexed" ? "Indexed" : status === "processing" ? "Processing" : "Error"}
-                    </span>
+                    <span className="ml-1">{getStatusLabel()}</span>
                   </CustomBadge>
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                {status === "indexed"
+                {status === "indexed" || status === "completed"
                   ? "Document has been processed and indexed"
                   : status === "processing"
                     ? "Document is being processed"
-                    : "Error processing document"}
+                    : status === "uploaded"
+                      ? "Document uploaded, waiting for processing"
+                      : "Error processing document"}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

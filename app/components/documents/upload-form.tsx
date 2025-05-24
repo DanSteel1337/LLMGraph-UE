@@ -3,15 +3,15 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { useToast } from "@/components/ui/use-toast"
+import { Button } from "../../../components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card"
+import { Progress } from "../../../components/ui/progress"
+import { Alert, AlertDescription } from "../../../components/ui/alert"
+import { useToast } from "../../../components/ui/use-toast"
 import { Upload, FileText, AlertCircle, X, CheckCircle, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { ErrorBoundary, useErrorBoundaryWithToast } from "@/app/components/ui/error-boundary"
-import { cn } from "@/lib/utils"
+import { ErrorBoundary, useErrorBoundaryWithToast } from "../ui/error-boundary"
+import { cn } from "../../../lib/utils"
 
 // Processing stages with enhanced styling aligned with project design
 const PROCESSING_STAGES = {

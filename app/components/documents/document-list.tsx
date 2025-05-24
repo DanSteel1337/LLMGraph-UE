@@ -43,11 +43,15 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const { toast } = useToast()
 
-  // Poll for document status updates
+  // Poll for document status updates with better error handling
   useEffect(() => {
-    if (!localDocuments.some((doc) => doc.status === "processing" || doc.status === "uploaded")) {
+    const processingDocs = localDocuments.filter((doc) => doc.status === "processing" || doc.status === "uploaded")
+
+    if (processingDocs.length === 0) {
       return
     }
+
+    console.log("[DOCUMENT LIST] Starting polling for", processingDocs.length, "processing documents")
 
     const interval = setInterval(async () => {
       try {
@@ -57,19 +61,45 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
 
         if (response.ok) {
           const updatedDocuments = await response.json()
+          console.log("[DOCUMENT LIST] Received updated documents:", updatedDocuments.length)
+
+          // Log status changes for debugging
+          updatedDocuments.forEach((doc) => {
+            const existing = localDocuments.find((d) => d.id === doc.id)
+            if (existing && existing.status !== doc.status) {
+              console.log("[DOCUMENT LIST] Status changed:", {
+                id: doc.id,
+                name: doc.name,
+                oldStatus: existing.status,
+                newStatus: doc.status,
+                chunks: doc.chunkCount,
+              })
+            }
+          })
+
           setLocalDocuments(updatedDocuments)
 
           // Stop polling if no documents are still processing
-          if (!updatedDocuments.some((doc) => doc.status === "processing" || doc.status === "uploaded")) {
+          const stillProcessing = updatedDocuments.filter(
+            (doc) => doc.status === "processing" || doc.status === "uploaded",
+          )
+
+          if (stillProcessing.length === 0) {
+            console.log("[DOCUMENT LIST] All documents processed, stopping polling")
             clearInterval(interval)
           }
+        } else {
+          console.error("[DOCUMENT LIST] Polling failed with status:", response.status)
         }
       } catch (error) {
-        console.error("Error polling document status:", error)
+        console.error("[DOCUMENT LIST] Error polling document status:", error)
       }
-    }, 5000) // Poll every 5 seconds
+    }, 3000) // Poll every 3 seconds for faster updates
 
-    return () => clearInterval(interval)
+    return () => {
+      console.log("[DOCUMENT LIST] Cleaning up polling interval")
+      clearInterval(interval)
+    }
   }, [localDocuments])
 
   const handleDelete = async () => {
