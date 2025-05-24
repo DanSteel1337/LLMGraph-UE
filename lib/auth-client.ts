@@ -10,17 +10,22 @@
 import { createBrowserClient } from "@supabase/ssr"
 import type { Database } from "@/types/supabase"
 
-// Environment validation
-const requiredEnvs = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"] as const
-
-requiredEnvs.forEach((env) => {
-  if (!process.env[env]) {
-    throw new Error(`Missing required environment variable: ${env}`)
-  }
-})
-
 // Singleton browser client
 let browserClient: ReturnType<typeof createBrowserClient<Database>> | null = null
+
+/**
+ * Validates required environment variables
+ * @private Internal helper function
+ */
+function validateEnvironment() {
+  const requiredEnvs = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"] as const
+
+  requiredEnvs.forEach((env) => {
+    if (!process.env[env]) {
+      throw new Error(`Missing required environment variable: ${env}`)
+    }
+  })
+}
 
 /**
  * Gets or creates a Supabase client for browser use
@@ -28,6 +33,8 @@ let browserClient: ReturnType<typeof createBrowserClient<Database>> | null = nul
  */
 export function getSupabaseClient() {
   if (!browserClient) {
+    validateEnvironment()
+
     browserClient = createBrowserClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
