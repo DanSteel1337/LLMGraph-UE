@@ -1,4 +1,4 @@
-import { requireAuth } from "../../../lib/auth"
+import { requireAuth } from "../../../lib/auth-server"
 import { createEmbedding } from "../../../lib/ai/embeddings"
 import { searchVectors } from "../../../lib/pinecone/search"
 import { validateEnv } from "../../../lib/utils/env"
@@ -30,13 +30,13 @@ export async function POST(request: Request) {
 
     return Response.json({ results })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized", message: "Authentication required" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      )
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
     }
-    
+
     console.error("Search API error:", error)
     return Response.json({ error: "Internal server error" }, { status: 500 })
   }

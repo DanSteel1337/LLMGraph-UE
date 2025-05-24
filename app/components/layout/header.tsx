@@ -14,7 +14,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { User, LogOut, Settings } from "lucide-react"
 import { useAuth } from "@/lib/hooks/use-auth"
-import { signOut } from "@/lib/auth"
+import { signOut } from "@/lib/auth-client"
 
 export function Header() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)

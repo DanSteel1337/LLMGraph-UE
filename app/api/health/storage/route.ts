@@ -5,7 +5,7 @@
  */
 export const runtime = "edge"
 
-import { requireAuth } from "../../../../lib/auth"
+import { requireAuth } from "../../../../lib/auth-server"
 import { cleanupOrphanedEntries } from "../../../../lib/documents/storage"
 import { kv } from "@vercel/kv"
 
@@ -59,13 +59,13 @@ export async function GET() {
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized", message: "Authentication required" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      )
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
     }
-    
+
     console.error("[HEALTH] Storage health check error:", error)
     return Response.json(
       {
@@ -93,13 +93,13 @@ export async function POST() {
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized", message: "Authentication required" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      )
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
     }
-    
+
     console.error("[HEALTH] Storage cleanup error:", error)
     return Response.json(
       {

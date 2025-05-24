@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { getSupabaseServer } from "@/lib/auth"
+import { getSupabaseServer } from "@/lib/auth-server"
 import { Header } from "@/app/components/layout/header"
 import { Sidebar } from "@/app/components/layout/sidebar"
 

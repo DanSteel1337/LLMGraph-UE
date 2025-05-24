@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { validateEnv } from "../../../../lib/utils/env"
-import { requireAuth } from "../../../../lib/auth"
+import { requireAuth } from "../../../../lib/auth-server"
 import { cleanupOrphanedEntries } from "../../../../lib/documents/storage"
 import { kv } from "@vercel/kv"
 
@@ -41,13 +41,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Invalid action" }, { status: 400 })
     }
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized", message: "Authentication required" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      )
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
     }
-    
+
     console.error("[CLEANUP API] Error:", error)
     return NextResponse.json(
       {
@@ -107,13 +107,13 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized", message: "Authentication required" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      )
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
     }
-    
+
     console.error("[CLEANUP API] Error:", error)
     return NextResponse.json(
       {

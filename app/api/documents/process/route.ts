@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { kv } from "@vercel/kv"
 import { validateEnv } from "../../../../lib/utils/env"
-import { requireAuth } from "../../../../lib/auth"
+import { requireAuth } from "../../../../lib/auth-server"
 import { processDocument } from "../../../../lib/documents/processor"
 
 export const runtime = "edge"
@@ -61,13 +61,10 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json(
-        { error: "Unauthorized", message: "Authentication required" },
-        { status: 401 }
-      )
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized", message: "Authentication required" }, { status: 401 })
     }
-    
+
     console.error("Document processing error:", error)
     return NextResponse.json({ error: "Failed to process document" }, { status: 500 })
   }

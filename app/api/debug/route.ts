@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { validateEnv } from "../../../lib/utils/env"
-import { requireAuth } from "../../../lib/auth"
+import { requireAuth } from "../../../lib/auth-server"
 
 export const runtime = "edge"
 
@@ -46,13 +46,13 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(debugInfo)
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized", message: "Authentication required" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      )
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
     }
-    
+
     console.error("[DEBUG API] Error:", error)
     return NextResponse.json(
       {

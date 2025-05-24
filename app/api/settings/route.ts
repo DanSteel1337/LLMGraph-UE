@@ -1,5 +1,5 @@
 import { kv } from "@vercel/kv"
-import { requireAuth } from "../../../lib/auth"
+import { requireAuth } from "../../../lib/auth-server"
 
 export const runtime = "edge"
 
@@ -13,13 +13,13 @@ export async function GET() {
 
     return Response.json({ settings })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized", message: "Authentication required" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      )
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
     }
-    
+
     console.error("Settings GET error:", error)
     return Response.json({ error: "Internal server error" }, { status: 500 })
   }
@@ -37,13 +37,13 @@ export async function POST(request: Request) {
 
     return Response.json({ success: true })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized", message: "Authentication required" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      )
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })
     }
-    
+
     console.error("Settings POST error:", error)
     return Response.json({ error: "Internal server error" }, { status: 500 })
   }
