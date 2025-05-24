@@ -1,11 +1,11 @@
 "use client"
 
 import { createBrowserClient } from "@supabase/ssr"
-import { useState, useEffect, useCallback, useRef } from "react"
-import type { User } from "@supabase/supabase-js"
+import { useEffect } from "react"
+import { useAuth as useAuthSingleton } from "./auth-singleton"
 
 let browserClient: ReturnType<typeof createBrowserClient> | null = null
-let globalInitialized = false
+const globalInitialized = false
 
 /**
  * Singleton browser client for client-side auth
@@ -29,102 +29,120 @@ function getBrowserClient() {
 /**
  * Client-side auth hook - Single source of truth for React components
  * MUST be used in ALL client components that need auth - no other auth hooks allowed
+ * @deprecated Use useAuth from lib/auth-singleton instead
+ * This is kept for backward compatibility only
  */
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [isInitialized, setIsInitialized] = useState(globalInitialized)
-  const initRef = useRef(globalInitialized)
-
-  // Sign in function
-  const signIn = useCallback(async (email: string, password: string) => {
-    try {
-      const supabase = getBrowserClient()
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (error) {
-        return { error: new Error(error.message) }
-      }
-
-      if (data.user) {
-        setUser(data.user)
-      }
-
-      return { error: null }
-    } catch (err) {
-      return { error: err instanceof Error ? err : new Error("Unknown error") }
-    }
-  }, [])
-
-  // Sign out function
-  const signOut = useCallback(async () => {
-    try {
-      const supabase = getBrowserClient()
-      await supabase.auth.signOut()
-      setUser(null)
-      globalInitialized = false
-      initRef.current = false
-
-      // Use window.location for clean redirect
-      window.location.href = "/auth/login"
-    } catch (error) {
-      console.error("Sign out error:", error)
-    }
-  }, [])
-
-  // Initialize auth state and listeners
   useEffect(() => {
-    if (typeof window === "undefined" || initRef.current) return
-
-    initRef.current = true
-    globalInitialized = true
-
-    const initializeAuth = async () => {
-      try {
-        const supabase = getBrowserClient()
-
-        // Get initial session
-        const {
-          data: { user: initialUser },
-        } = await supabase.auth.getUser()
-
-        setUser(initialUser)
-        setIsInitialized(true)
-        setLoading(false)
-      } catch (error) {
-        console.error("Auth initialization error:", error)
-        setUser(null)
-        setIsInitialized(true)
-        setLoading(false)
-      }
-    }
-
-    // Set up auth state listener - NO AUTOMATIC REDIRECTS
-    const supabase = getBrowserClient()
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null)
-      setLoading(false)
-
-      // ❌ REMOVED AUTOMATIC REDIRECTS - Let components handle routing
-    })
-
-    initializeAuth()
-
-    return () => {
-      subscription.unsubscribe()
-    }
+    console.warn(
+      "DEPRECATED: useAuth() from lib/auth-client.ts is deprecated. " +
+        "Use useAuth() from lib/auth-singleton.ts instead.",
+    )
   }, [])
 
-  return {
-    user,
-    loading,
-    signIn,
-    signOut,
-    isInitialized,
-  }
+  // Forward to the new singleton implementation
+  return useAuthSingleton()
 }
+
+// /**
+//  * Client-side auth hook - Single source of truth for React components
+//  * MUST be used in ALL client components that need auth - no other auth hooks allowed
+//  */
+// export function useAuth() {
+//   const [user, setUser] = useState<User | null>(null)
+//   const [loading, setLoading] = useState(true)
+//   const [isInitialized, setIsInitialized] = useState(globalInitialized)
+//   const initRef = useRef(globalInitialized)
+
+//   // Sign in function
+//   const signIn = useCallback(async (email: string, password: string) => {
+//     try {
+//       const supabase = getBrowserClient()
+//       const { data, error } = await supabase.auth.signInWithPassword({
+//         email,
+//         password,
+//       })
+
+//       if (error) {
+//         return { error: new Error(error.message) }
+//       }
+
+//       if (data.user) {
+//         setUser(data.user)
+//       }
+
+//       return { error: null }
+//     } catch (err) {
+//       return { error: err instanceof Error ? err : new Error("Unknown error") }
+//     }
+//   }, [])
+
+//   // Sign out function
+//   const signOut = useCallback(async () => {
+//     try {
+//       const supabase = getBrowserClient()
+//       await supabase.auth.signOut()
+//       setUser(null)
+//       globalInitialized = false
+//       initRef.current = false
+
+//       // Use window.location for clean redirect
+//       window.location.href = "/auth/login"
+//     } catch (error) {
+//       console.error("Sign out error:", error)
+//     }
+//   }, [])
+
+//   // Initialize auth state and listeners
+//   useEffect(() => {
+//     if (typeof window === "undefined" || initRef.current) return
+
+//     initRef.current = true
+//     globalInitialized = true
+
+//     const initializeAuth = async () => {
+//       try {
+//         const supabase = getBrowserClient()
+
+//         // Get initial session
+//         const {
+//           data: { user: initialUser },
+//         } = await supabase.auth.getUser()
+
+//         setUser(initialUser)
+//         setIsInitialized(true)
+//         setLoading(false)
+//       } catch (error) {
+//         console.error("Auth initialization error:", error)
+//         setUser(null)
+//         setIsInitialized(true)
+//         setLoading(false)
+//       }
+//     }
+
+//     // Set up auth state listener - NO AUTOMATIC REDIRECTS
+//     const supabase = getBrowserClient()
+//     const {
+//       data: { subscription },
+//     } = supabase.auth.onAuthStateChange((event, session) => {
+//       setUser(session?.user ?? null)
+//       setLoading(false)
+
+//       // ❌ REMOVED AUTOMATIC REDIRECTS - Let components handle routing
+//     })
+
+//     initializeAuth()
+
+//     return () => {
+//       subscription.unsubscribe()
+//     }
+//   }, [])
+
+//   return {
+//     user,
+//     loading,
+//     signIn,
+//     signOut,
+//     isInitialized,
+//   }
+// }

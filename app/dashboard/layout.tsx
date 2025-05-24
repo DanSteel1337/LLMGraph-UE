@@ -1,56 +1,62 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useState, useRef } from "react"
-import { useRouter } from "next/navigation"
-import { useAuth } from "../../lib/auth-client"
+import { useEffect } from "react"
 import { Header } from "../components/layout/header"
 import { Sidebar } from "../components/layout/sidebar"
+import { useProtectedRoute, resetNavigationState, AuthGuardLoading } from "../../lib/route-guards"
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { user, loading, isInitialized } = useAuth()
-  const router = useRouter()
-  const hasRedirectedRef = useRef(false)
-  const [isRedirecting, setIsRedirecting] = useState(false)
-
+  // ✅ RESET NAVIGATION STATE - Prevents stale redirects
   useEffect(() => {
-    // Only redirect once when fully initialized and no user
-    if (isInitialized && !loading && !user && !hasRedirectedRef.current && !isRedirecting) {
-      hasRedirectedRef.current = true
-      setIsRedirecting(true)
+    resetNavigationState()
+    console.log("[DASHBOARD] Navigation state reset")
+  }, [])
 
-      // Use replace to avoid history issues
-      router.replace("/auth/login")
-    }
-  }, [isInitialized, loading, user]) // ❌ REMOVED router from dependencies
+  // ✅ PROTECTED ROUTE GUARD - Handles auth check and redirects
+  const { shouldRender, isLoading, user } = useProtectedRoute("/auth/login")
 
-  // Show loading while checking auth or redirecting
-  if (!isInitialized || loading || isRedirecting) {
+  // ✅ LOADING STATE - Clean UX during auth check
+  if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-          <p className="mt-2 text-sm text-muted-foreground">{isRedirecting ? "Redirecting..." : "Loading..."}</p>
+          <p className="mt-2 text-sm text-muted-foreground">Loading dashboard...</p>
         </div>
       </div>
     )
   }
 
-  // Don't render dashboard if no user
-  if (!user) {
-    return null
+  // ✅ AUTH CHECK - Don't render if not authenticated
+  if (!shouldRender) {
+    return <AuthGuardLoading />
   }
 
+  // ✅ RENDER DASHBOARD - Only when authenticated
   return (
     <div className="flex h-screen">
       <Sidebar />
       <div className="flex flex-1 flex-col">
         <Header />
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+        <main className="flex-1 overflow-auto p-6">
+          {/* ✅ DEV INFO - Only in development */}
+          {process.env.NODE_ENV === "development" && (
+            <div className="mb-4 rounded border border-gray-200 bg-gray-50 p-2 text-xs text-gray-500">
+              <p>
+                <strong>User:</strong> {user?.email || "Not authenticated"}
+              </p>
+              <p>
+                <strong>Auth:</strong> Protected route active
+              </p>
+            </div>
+          )}
+          {children}
+        </main>
       </div>
     </div>
   )
