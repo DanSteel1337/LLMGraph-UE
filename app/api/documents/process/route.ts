@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { kv } from "@vercel/kv"
+import { validateEnv } from "../../../../lib/utils/env"
 import { requireAuth } from "../../../../lib/auth"
 import { processDocument } from "../../../../lib/documents/processor"
 
@@ -7,7 +8,13 @@ export const runtime = "edge"
 
 export async function POST(request: NextRequest) {
   try {
-    // Single source of truth auth validation
+    // Validate environment
+    const envResult = validateEnv(["openai", "pinecone", "blob"])
+    if (!envResult.isValid) {
+      return NextResponse.json({ error: "Environment configuration error" }, { status: 500 })
+    }
+
+    // Simple auth check - throws if unauthorized
     const user = await requireAuth()
 
     // Get document ID, URL, and filename from request body
@@ -54,16 +61,14 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error("Document processing error:", error)
-
-    // Check if this is an auth error
-    if (error instanceof Error && error.message.includes("Authentication")) {
-      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      })
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: "Unauthorized", message: "Authentication required" },
+        { status: 401 }
+      )
     }
-
+    
+    console.error("Document processing error:", error)
     return NextResponse.json({ error: "Failed to process document" }, { status: 500 })
   }
 }

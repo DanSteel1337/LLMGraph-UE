@@ -52,6 +52,7 @@ llmgraph-ue/
 │   │   │   └── debug-overlay.tsx  # Debug overlay
 │   │   └── ui/
 │   │       ├── error-boundary.tsx # Error handling
+│   │       ├── auth-loading.tsx   # Auth loading state
 │   │       └── custom-badge.tsx   # Status badges
 │   │
 │   └── api/                       # Edge Runtime API routes
@@ -68,8 +69,10 @@ llmgraph-ue/
 │           └── cleanup/route.ts   # KV cleanup utilities
 │
 ├── lib/                           # Shared utilities (SINGLE SOURCE)
-│   ├── auth.ts                    # Server-side auth singleton
+│   ├── auth.ts                    # Authentication validation
 │   ├── auth-client.ts             # Client-side auth hook
+│   ├── auth-singleton.ts          # Supabase client singleton
+│   ├── route-guards.ts            # Protected route utilities
 │   │
 │   ├── ai/                        # AI utilities
 │   │   ├── chat.ts                # Chat completions
@@ -101,7 +104,7 @@ llmgraph-ue/
 │   ├── card.tsx                   # Card component
 │   ├── tabs.tsx                   # Tabs component
 │   ├── skeleton.tsx               # Loading skeleton
-│   ���── progress.tsx               # Progress bar
+│   ├── progress.tsx               # Progress bar
 │   ├── label.tsx                  # Form label
 │   ├── toast.tsx                  # Toast notification
 │   └── toaster.tsx                # Toast container
@@ -120,10 +123,11 @@ llmgraph-ue/
 
 ## Key Architectural Decisions
 
-### **1. Authentication (Single Source of Truth)**
-- **Server**: `lib/auth.ts` - API route authentication
-- **Client**: `lib/auth-client.ts` - React component authentication
-- **Pattern**: Singleton pattern prevents duplication
+### **1. Authentication Architecture**
+- **Server**: `lib/auth.ts` - API route authentication with `validateAuth()` and `unauthorizedResponse()`
+- **Client**: `lib/auth-client.ts` - React component authentication with `useAuth()` hook
+- **Route Protection**: `lib/route-guards.ts` - Client-side route protection with `useProtectedRoute()`
+- **Pattern**: Consistent auth validation across all API routes
 
 ### **2. Edge Runtime Compatibility**
 - **API Routes**: All use `export const runtime = "edge"`
@@ -151,7 +155,7 @@ llmgraph-ue/
 ### **API Routes (Edge Runtime)**
 \`\`\`typescript
 // ✅ Correct - Relative imports
-import { validateAuth } from "../../../lib/auth"
+import { validateAuth, unauthorizedResponse } from "../../../lib/auth"
 import { searchVectors } from "../../../lib/pinecone/search"
 
 // ❌ Wrong - Path aliases break Edge Runtime
@@ -162,10 +166,64 @@ import { validateAuth } from "@/lib/auth"
 \`\`\`typescript
 // ✅ Correct - Can use path aliases
 import { Button } from "@/components/ui/button"
-import { useAuth } from "../../../lib/auth-client"
+import { useAuth } from "@/lib/auth-client"
 
 // ✅ Also correct - Relative imports
 import { Button } from "../../../components/ui/button"
+\`\`\`
+
+## Authentication Pattern
+
+### **API Route Pattern**
+\`\`\`typescript
+import { validateAuth, unauthorizedResponse } from "../../../lib/auth"
+
+export const runtime = "edge"
+
+export async function POST(request: Request) {
+  try {
+    // Validate authentication
+    const { user, error } = await validateAuth()
+    if (error) return unauthorizedResponse()
+    
+    // Your route logic here
+    return Response.json({ data })
+    
+  } catch (error) {
+    // Error handling
+    return Response.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+\`\`\`
+
+### **Client Component Pattern**
+\`\`\`typescript
+// For auth state in components
+import { useAuth } from "@/lib/auth-client"
+
+export function MyComponent() {
+  const { user, loading, signOut } = useAuth()
+  
+  if (loading) return <Skeleton />
+  if (!user) return <Redirect to="/auth/login" />
+  
+  return <div>Welcome {user.email}</div>
+}
+\`\`\`
+
+### **Protected Route Pattern**
+\`\`\`typescript
+// For protected routes
+import { useProtectedRoute } from "@/lib/route-guards"
+
+export default function ProtectedPage() {
+  const { shouldRender, isLoading, user } = useProtectedRoute("/auth/login")
+  
+  if (isLoading) return <LoadingSpinner />
+  if (!shouldRender) return null // Will redirect automatically
+  
+  return <YourComponent />
+}
 \`\`\`
 
 ## Performance Considerations
@@ -181,6 +239,3 @@ import { Button } from "../../../components/ui/button"
 - **Static Assets**: CDN caching for blob storage
 
 This structure ensures **maintainability**, **performance**, and **Edge Runtime compatibility** while following Next.js best practices.
-\`\`\`
-
-### **Step 7: Final Package.json Cleanup**

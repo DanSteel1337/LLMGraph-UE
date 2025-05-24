@@ -1,11 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { validateEnv } from "../../../lib/utils/env"
 import { requireAuth } from "../../../lib/auth"
 
 export const runtime = "edge"
 
 export async function GET(request: NextRequest) {
   try {
-    // Single source of truth auth validation
+    // Validate environment
+    validateEnv(["SUPABASE", "VERCEL_KV"])
+
+    // Simple auth check - throws if unauthorized
     const user = await requireAuth()
 
     // Get debug information
@@ -13,7 +17,7 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
       user: {
         id: user.id,
-        email: user.email,
+        email: user.email || "",
       },
       environment: {
         nodeEnv: process.env.NODE_ENV,
@@ -42,16 +46,14 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(debugInfo)
   } catch (error) {
-    console.error("[DEBUG API] Error:", error)
-
-    // Check if this is an auth error
-    if (error instanceof Error && error.message.includes("Authentication")) {
-      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      })
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized", message: "Authentication required" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      )
     }
-
+    
+    console.error("[DEBUG API] Error:", error)
     return NextResponse.json(
       {
         error: "Internal Server Error",

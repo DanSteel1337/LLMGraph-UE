@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { put } from "@vercel/blob"
+import { validateEnv } from "../../../../lib/utils/env"
 import { kv } from "@vercel/kv"
 import { requireAuth } from "../../../../lib/auth"
 
@@ -11,7 +12,10 @@ const ALLOWED_EXTENSIONS = [".md", ".txt", ".pdf", ".html"]
 
 export async function POST(request: NextRequest) {
   try {
-    // Single source of truth auth validation
+    // Validate environment
+    validateEnv(["SUPABASE", "VERCEL_BLOB", "VERCEL_KV"])
+
+    // Simple auth check - throws if unauthorized
     const user = await requireAuth()
 
     const formData = await request.formData()
@@ -80,16 +84,14 @@ export async function POST(request: NextRequest) {
       status: "uploaded",
     })
   } catch (error) {
-    console.error("Upload error:", error)
-
-    // Check if this is an auth error
-    if (error instanceof Error && error.message.includes("Authentication")) {
-      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      })
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { error: "Unauthorized", message: "Authentication required" },
+        { status: 401 }
+      )
     }
-
+    
+    console.error("Upload error:", error)
     return NextResponse.json({ error: "Failed to upload document" }, { status: 500 })
   }
 }

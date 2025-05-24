@@ -3,12 +3,13 @@
 import type React from "react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { signIn } from "../../../lib/auth"
-import { useToast } from "../../../hooks/use-toast"
-import { Button } from "../../../components/ui/button"
-import { Input } from "../../../components/ui/input"
-import { Label } from "../../../components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../../components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { useToast } from "@/hooks/use-toast"
+import { signIn } from "@/lib/auth"
+import { ErrorBoundary } from "@/app/components/ui/error-boundary"
+import { AlertCircle } from "lucide-react"
 
 export function AuthForm() {
   const [isLoading, setIsLoading] = useState(false)
@@ -22,24 +23,15 @@ export function AuthForm() {
     setIsLoading(true)
 
     try {
-      const { user, error } = await signIn(email, password)
+      const { error } = await signIn(email, password)
 
       if (error) {
         throw error
       }
 
-      if (!user) {
-        throw new Error("Authentication failed")
-      }
-
-      toast({
-        title: "Success",
-        description: "You have been logged in successfully.",
-      })
-
       router.push("/dashboard")
+      router.refresh()
     } catch (error) {
-      console.error("[AUTH FORM] Login error:", error)
       toast({
         title: "Authentication Error",
         description: error instanceof Error ? error.message : "Login failed",
@@ -51,43 +43,46 @@ export function AuthForm() {
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle>Sign In</CardTitle>
-        <CardDescription>Enter your credentials to access the dashboard</CardDescription>
-      </CardHeader>
-      <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="your@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </div>
-        </CardContent>
-        <CardFooter>
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? "Signing in..." : "Sign In"}
+    <ErrorBoundary
+      onError={(error) => {
+        toast({
+          title: "Error",
+          description: error.message || "An unexpected error occurred",
+          variant: "destructive",
+        })
+      }}
+      fallback={
+        <div className="p-6 flex flex-col items-center justify-center">
+          <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+          <h3 className="text-xl font-semibold mb-2">Authentication Error</h3>
+          <p className="text-muted-foreground text-center mb-4">
+            An error occurred in the authentication form. Please try again.
+          </p>
+          <Button onClick={() => window.location.reload()} variant="default">
+            Refresh Page
           </Button>
-        </CardFooter>
+        </div>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="password">Password</Label>
+          <Input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
+        <Button type="submit" className="w-full" disabled={isLoading}>
+          {isLoading ? "Signing in..." : "Sign In"}
+        </Button>
       </form>
-    </Card>
+    </ErrorBoundary>
   )
 }

@@ -5,29 +5,27 @@ export const runtime = "edge"
 
 export async function GET() {
   try {
-    // Single source of truth auth validation
+    // Simple auth check - throws if unauthorized
     const user = await requireAuth()
 
     const documents = await getDocuments()
     return Response.json({ documents })
   } catch (error) {
-    console.error("Documents GET error:", error)
-
-    // Check if this is an auth error
-    if (error instanceof Error && error.message.includes("Authentication")) {
-      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      })
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized", message: "Authentication required" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      )
     }
-
+    
+    console.error("Documents GET error:", error)
     return Response.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    // Single source of truth auth validation
+    // Simple auth check - throws if unauthorized
     const user = await requireAuth()
 
     const { searchParams } = new URL(request.url)
@@ -40,16 +38,14 @@ export async function DELETE(request: Request) {
     await deleteDocument(documentId)
     return Response.json({ success: true })
   } catch (error) {
-    console.error("Documents DELETE error:", error)
-
-    // Check if this is an auth error
-    if (error instanceof Error && error.message.includes("Authentication")) {
-      return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      })
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized", message: "Authentication required" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      )
     }
-
+    
+    console.error("Documents DELETE error:", error)
     return Response.json({ error: "Internal server error" }, { status: 500 })
   }
 }

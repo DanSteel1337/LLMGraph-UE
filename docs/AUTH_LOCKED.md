@@ -21,47 +21,44 @@ export async function requireAuth()       // Throws if unauthorized
 export async function signIn()            // Email/password login
 export async function signOut()           // Clear session
 export async function getCurrentUser()    // Get current user
-```
 
-### **Client-Side Hook (`lib/hooks/use-auth.ts`)**
 
-- **Purpose**: React component state management
-- **Pattern**: Standard React hook
-- **Features**: User state, loading state, auth listeners
+Client-Side Hook (lib/hooks/use-auth.ts)
 
-```typescript
-// Components use this hook for auth state
+Purpose: React component state management
+Pattern: Standard React hook
+Features: User state, loading state, auth listeners
+
+typescript// Components use this hook for auth state
 const { user, loading } = useAuth()
-```
+Key Principles
+1. Single Source of Truth
 
-## Key Principles
+One File: All auth logic in lib/auth.ts
+No Duplication: No auth-client.ts, auth-singleton.ts, etc.
+Clear Exports: Only 6 functions, no helpers exported
 
-### **1. Single Source of Truth**
-- **One File**: All auth logic in `lib/auth.ts`
-- **No Duplication**: No auth-client.ts, supabase.ts, etc.
-- **Clear Exports**: Only 6 functions, no helpers exported
+2. Consistent Patterns
 
-### **2. Consistent Patterns**
-- **API Routes**: `try { await requireAuth() } catch { return 401 }`
-- **Components**: `useAuth()` hook for state, direct imports for actions
-- **Error Handling**: requireAuth throws, routes handle response
+API Routes: try { await requireAuth() } catch { return 401 }
+Components: useAuth() hook for state, direct imports for actions
+Error Handling: requireAuth throws, routes handle response
 
-### **3. Edge Runtime Compatibility**
-- **API Routes**: Relative imports only `../../../lib/auth`
-- **Components**: Can use aliases `@/lib/auth`
-- **No Node.js**: Pure Edge Runtime compatible
+3. Edge Runtime Compatibility
 
-### **4. Simplicity**
-- **No Providers**: No AuthProvider or context
-- **No Complex State**: Supabase handles via cookies
-- **Minimal Code**: ~150 lines total
+API Routes: Relative imports only ../../../lib/auth
+Components: Can use aliases @/lib/auth
+No Node.js: Pure Edge Runtime compatible
 
-## Implementation Details
+4. Simplicity
 
-### **API Route Pattern**
+No Providers: No AuthProvider or context
+No Complex State: Supabase handles via cookies
+Minimal Code: ~150 lines total
 
-```typescript
-import { requireAuth } from "../../../lib/auth"
+Implementation Details
+API Route Pattern
+typescriptimport { requireAuth } from "../../../lib/auth"
 
 export const runtime = "edge"
 
@@ -84,12 +81,8 @@ export async function POST(request: Request) {
     )
   }
 }
-```
-
-### **Component Pattern**
-
-```typescript
-// For auth state in components
+Component Pattern
+typescript// For auth state in components
 import { useAuth } from "@/lib/hooks/use-auth"
 
 export function MyComponent() {
@@ -100,10 +93,7 @@ export function MyComponent() {
   
   return <div>Welcome {user.email}</div>
 }
-```
-
-```typescript
-// For auth actions in components
+typescript// For auth actions in components
 import { signIn, signOut } from "@/lib/auth"
 
 export function LoginForm() {
@@ -115,11 +105,7 @@ export function LoginForm() {
   
   return <form onSubmit={handleSubmit}>...</form>
 }
-```
-
-## File Structure
-
-```
+File Structure
 lib/
 ├── auth.ts              # Single auth file (6 exports only)
 └── hooks/
@@ -134,32 +120,29 @@ app/
 └── auth/
     └── login/
         └── page.tsx      # Simple login page
-```
+Migration from Complex Auth
+Deleted Files
 
-## Migration from Complex Auth
+❌ lib/auth-client.ts - Merged into auth.ts
+❌ lib/auth-singleton.ts - Merged into auth.ts
+❌ lib/route-guards.ts - Not needed
+❌ app/auth/callback/route.ts - Not needed for email auth
+❌ All auth providers and contexts - Not needed
 
-### **Deleted Files**
-- ❌ `lib/auth-client.ts` - Merged into auth.ts
-- ❌ `lib/auth-singleton.ts` - Merged into auth.ts
-- ❌ `lib/supabase.ts` - Merged into auth.ts
-- ❌ `lib/supabase-server.ts` - Merged into auth.ts
-- ❌ `lib/route-guards.ts` - Not needed
-- ❌ `app/auth/callback/route.ts` - Not needed for email auth
-- ❌ All auth providers and contexts - Not needed
+Updated Patterns
 
-### **Updated Patterns**
-- ✅ All API routes use `requireAuth()` with try-catch
-- ✅ Components use `useAuth()` hook for state
-- ✅ Components import actions directly from `lib/auth`
-- ✅ No complex providers or contexts
-- ✅ Edge Runtime compatible throughout
+✅ All API routes use requireAuth() with try-catch
+✅ Components use useAuth() hook for state
+✅ Components import actions directly from lib/auth
+✅ No complex providers or contexts
+✅ Edge Runtime compatible throughout
 
-## Benefits
+Benefits
 
-1. **Simplicity**: One file, 6 functions, ~150 lines total
-2. **Maintainability**: Single source of truth
-3. **Performance**: Edge Runtime optimized
-4. **Security**: Consistent auth checks
-5. **Developer Experience**: Clear, predictable patterns
+Simplicity: One file, 6 functions, ~150 lines total
+Maintainability: Single source of truth
+Performance: Edge Runtime optimized
+Security: Consistent auth checks
+Developer Experience: Clear, predictable patterns
 
-This architecture provides **maximum simplicity** while maintaining **security** and **Edge Runtime compatibility** for a single-user admin dashb
+This architecture provides maximum simplicity while maintaining security and Edge Runtime compatibility for a single-user admin dashboard.

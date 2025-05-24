@@ -1,46 +1,39 @@
 "use client"
 
 import type React from "react"
-import { useAuth } from "../../lib/hooks/use-auth"
-import { Loader2 } from "lucide-react"
-import { useRouter } from "next/navigation"
 import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/hooks/use-auth"
 
 export default function AuthLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { user, isLoading } = useAuth()
+  const { user, loading } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    // If authenticated, redirect to dashboard
-    if (user && !isLoading) {
+    if (!loading && user) {
       router.push("/dashboard")
     }
-  }, [user, isLoading, router])
+  }, [user, loading, router])
 
-  // Show loading state
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+          <p className="mt-2 text-sm text-muted-foreground">Loading...</p>
+        </div>
       </div>
     )
   }
 
-  // If authenticated, will redirect to dashboard
   if (user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-2">Redirecting to dashboard...</span>
-      </div>
-    )
+    return null // Will redirect to dashboard
   }
 
-  // Show login form
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="w-full max-w-md space-y-6">

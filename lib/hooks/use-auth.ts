@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import type { User } from "@supabase/supabase-js"
-import { getSupabaseClient, getCurrentUser, signIn as authSignIn, signOut as authSignOut } from "@/lib/auth"
+import { getSupabaseClient, getCurrentUser } from "@/lib/auth"
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
@@ -11,7 +11,7 @@ export function useAuth() {
   useEffect(() => {
     // Get initial user
     getCurrentUser()
-      .then(({ user }) => setUser(user))
+      .then(setUser)
       .finally(() => setLoading(false))
 
     // Listen for auth changes
@@ -25,19 +25,5 @@ export function useAuth() {
     return () => subscription.unsubscribe()
   }, [])
 
-  const signIn = async (email: string, password: string) => {
-    return authSignIn(email, password)
-  }
-
-  const signOut = async () => {
-    return authSignOut()
-  }
-
-  return {
-    user,
-    loading,
-    isAuthenticated: !!user,
-    signIn,
-    signOut,
-  }
+  return { user, loading }
 }
