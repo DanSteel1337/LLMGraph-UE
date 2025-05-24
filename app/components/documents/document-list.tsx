@@ -37,21 +37,28 @@ interface DocumentListProps {
 }
 
 export function DocumentList({ documents: initialDocuments }: DocumentListProps) {
+  // Filter out invalid documents immediately
+  const validInitialDocuments = initialDocuments.filter(
+    (doc) => doc.id && doc.id !== "undefined" && doc.name && doc.name.trim() !== "" && doc.name !== "Unnamed Document",
+  )
+
   const [isDeleting, setIsDeleting] = useState(false)
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null)
-  const [localDocuments, setLocalDocuments] = useState<Document[]>(initialDocuments)
+  const [localDocuments, setLocalDocuments] = useState<Document[]>(validInitialDocuments)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const { toast } = useToast()
 
-  // Poll for document status updates with better error handling
+  // Enhanced polling with better validation
   useEffect(() => {
-    const processingDocs = localDocuments.filter((doc) => doc.status === "processing" || doc.status === "uploaded")
+    const processingDocs = localDocuments.filter(
+      (doc) => doc.id && doc.id !== "undefined" && (doc.status === "processing" || doc.status === "uploaded"),
+    )
 
     if (processingDocs.length === 0) {
       return
     }
 
-    console.log("[DOCUMENT LIST] Starting polling for", processingDocs.length, "processing documents")
+    console.log("[DOCUMENT LIST] Starting polling for", processingDocs.length, "valid processing documents")
 
     const interval = setInterval(async () => {
       try {
@@ -61,10 +68,17 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
 
         if (response.ok) {
           const updatedDocuments = await response.json()
-          console.log("[DOCUMENT LIST] Received updated documents:", updatedDocuments.length)
+
+          // Filter out invalid documents from the response
+          const validUpdatedDocuments = updatedDocuments.filter(
+            (doc) =>
+              doc.id && doc.id !== "undefined" && doc.name && doc.name.trim() !== "" && doc.name !== "Unnamed Document",
+          )
+
+          console.log("[DOCUMENT LIST] Received valid updated documents:", validUpdatedDocuments.length)
 
           // Log status changes for debugging
-          updatedDocuments.forEach((doc) => {
+          validUpdatedDocuments.forEach((doc) => {
             const existing = localDocuments.find((d) => d.id === doc.id)
             if (existing && existing.status !== doc.status) {
               console.log("[DOCUMENT LIST] Status changed:", {
@@ -77,15 +91,15 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
             }
           })
 
-          setLocalDocuments(updatedDocuments)
+          setLocalDocuments(validUpdatedDocuments)
 
-          // Stop polling if no documents are still processing
-          const stillProcessing = updatedDocuments.filter(
+          // Stop polling if no valid documents are still processing
+          const stillProcessing = validUpdatedDocuments.filter(
             (doc) => doc.status === "processing" || doc.status === "uploaded",
           )
 
           if (stillProcessing.length === 0) {
-            console.log("[DOCUMENT LIST] All documents processed, stopping polling")
+            console.log("[DOCUMENT LIST] All valid documents processed, stopping polling")
             clearInterval(interval)
           }
         } else {
@@ -94,7 +108,7 @@ export function DocumentList({ documents: initialDocuments }: DocumentListProps)
       } catch (error) {
         console.error("[DOCUMENT LIST] Error polling document status:", error)
       }
-    }, 3000) // Poll every 3 seconds for faster updates
+    }, 3000)
 
     return () => {
       console.log("[DOCUMENT LIST] Cleaning up polling interval")

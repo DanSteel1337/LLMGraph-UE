@@ -11,68 +11,93 @@ import { kv } from "@vercel/kv"
 import { createClient } from "../pinecone/client"
 import { testBlobAccess } from "../utils/blob-fetch"
 
-// Enhanced document listing with pagination support and validation
+// Enhanced document listing with proper validation and cleanup
 export async function getDocuments(limit = 100, cursor?: string) {
   console.log("[STORAGE] Getting documents, limit:", limit)
 
-  // Use scan pattern for efficient listing
-  const pattern = "document:*"
-  const documents = []
-
   try {
-    // Get keys matching pattern
-    const keys = await kv.keys(pattern)
-    console.log("[STORAGE] Found document keys:", keys.length)
+    // Get all keys matching the document pattern
+    const allKeys = await kv.keys("document:*")
+    console.log("[STORAGE] Found total keys:", allKeys.length)
 
-    // Filter out status and metric keys
-    const documentKeys = keys.filter(
-      (key) => !key.includes(":status") && !key.includes(":chunks") && !key.includes(":vectors"),
+    // Filter to get only main document keys (not status/chunks/vectors)
+    const documentKeys = allKeys.filter(
+      (key) =>
+        !key.includes(":status") &&
+        !key.includes(":chunks") &&
+        !key.includes(":vectors") &&
+        !key.includes(":error") &&
+        !key.includes(":content-length") &&
+        !key.includes(":processed-at") &&
+        !key.includes(":processing-results"),
     )
 
     console.log("[STORAGE] Filtered document keys:", documentKeys.length)
 
-    // Batch get for efficiency
-    if (documentKeys.length > 0) {
-      // Get documents in batches to avoid memory issues
-      const batchSize = 20
-      for (let i = 0; i < Math.min(documentKeys.length, limit); i += batchSize) {
-        const batch = documentKeys.slice(i, i + batchSize)
-        const batchPromises = batch.map((key) => kv.get(key))
-        const batchResults = await Promise.all(batchPromises)
+    if (documentKeys.length === 0) {
+      return []
+    }
 
-        for (const doc of batchResults) {
-          if (doc) {
-            // Normalize document format for consistency
-            const normalizedDoc = {
-              id: doc.id,
-              name: doc.name || doc.filename || "Unnamed Document",
-              filename: doc.filename || doc.name || "Unnamed Document",
-              type: doc.type || doc.fileType || "unknown",
-              fileType: doc.fileType || doc.type || "unknown",
-              size: doc.size || doc.fileSize || 0,
-              fileSize: doc.fileSize || doc.size || 0,
-              url: doc.url || "",
-              uploadedAt: doc.uploadedAt || new Date().toISOString(),
-              status: doc.status || "unknown",
-              userId: doc.userId,
-              // Include blob metadata if available
-              blobMetadata: doc.blobMetadata,
-            }
+    // Get documents in batches and validate each one
+    const documents = []
+    const batchSize = 20
+    const keysToCleanup = []
 
-            documents.push(normalizedDoc)
-          }
+    for (let i = 0; i < Math.min(documentKeys.length, limit); i += batchSize) {
+      const batch = documentKeys.slice(i, i + batchSize)
+      const batchResults = await Promise.all(batch.map((key) => kv.get(key)))
+
+      for (let j = 0; j < batch.length; j++) {
+        const doc = batchResults[j]
+        const key = batch[j]
+
+        // Validate document has required fields
+        if (!doc || !doc.id || !doc.name) {
+          console.warn("[STORAGE] Invalid document found, marking for cleanup:", key, doc)
+          keysToCleanup.push(key)
+          continue
+        }
+
+        // Normalize and validate document
+        const normalizedDoc = {
+          id: doc.id,
+          name: doc.name || doc.filename || "Unnamed Document",
+          filename: doc.filename || doc.name || "Unnamed Document",
+          type: doc.type || doc.fileType || "unknown",
+          fileType: doc.fileType || doc.type || "unknown",
+          size: doc.size || doc.fileSize || 0,
+          fileSize: doc.fileSize || doc.size || 0,
+          url: doc.url || "",
+          uploadedAt: doc.uploadedAt || new Date().toISOString(),
+          status: doc.status || "unknown",
+          userId: doc.userId,
+          blobMetadata: doc.blobMetadata,
+        }
+
+        // Only include documents with valid IDs
+        if (normalizedDoc.id && normalizedDoc.id !== "undefined") {
+          documents.push(normalizedDoc)
+        } else {
+          console.warn("[STORAGE] Document with invalid ID, marking for cleanup:", normalizedDoc)
+          keysToCleanup.push(key)
         }
       }
     }
 
-    console.log("[STORAGE] Retrieved documents:", documents.length)
+    // Clean up invalid entries asynchronously
+    if (keysToCleanup.length > 0) {
+      console.log("[STORAGE] Cleaning up", keysToCleanup.length, "invalid document entries")
+      Promise.all(keysToCleanup.map((key) => kv.del(key))).catch((error) => {
+        console.error("[STORAGE] Error cleaning up invalid entries:", error)
+      })
+    }
+
+    console.log("[STORAGE] Retrieved valid documents:", documents.length)
+    return documents
   } catch (error) {
     console.error("[STORAGE] Error fetching documents:", error)
-    // Return empty array on error rather than throwing
     return []
   }
-
-  return documents
 }
 
 // Get document metadata and status with enhanced validation
