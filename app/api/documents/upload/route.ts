@@ -6,7 +6,7 @@
  * Features:
  * - Validates file types (Markdown, Text, PDF, HTML)
  * - Validates file content and size
- * - Uploads files to Vercel Blob with private access
+ * - Uploads files to Vercel Blob with public access
  * - Stores document metadata in Vercel KV
  * - Triggers asynchronous document processing
  * - Generates unique document IDs with timestamps
@@ -54,10 +54,10 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const ALLOWED_TYPES = ["text/markdown", "text/plain", "application/pdf", "text/html"]
 const ALLOWED_EXTENSIONS = [".md", ".txt", ".pdf", ".html"]
 
-// Simple debug logger for server-side
+// Enhanced debug logger for server-side
 const serverDebug = (message: string, ...args: any[]) => {
   if (process.env.NEXT_PUBLIC_DEBUG === "true") {
-    console.log(`[SERVER DEBUG] ${message}`, ...args)
+    console.log(`[UPLOAD API] ${message}`, ...args)
   }
 }
 
@@ -144,6 +144,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate file content is not empty
+    if (file.size === 0) {
+      serverDebug("Empty file provided")
+      return NextResponse.json({ error: "Bad Request", message: "File is empty" }, { status: 400 })
+    }
+
     // Validate file name for security
     const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-_]/g, "_")
     serverDebug("Sanitized filename:", sanitizedFileName)
@@ -153,13 +159,14 @@ export async function POST(request: NextRequest) {
     serverDebug("Generated document ID:", documentId)
 
     // Upload to Vercel Blob
-    serverDebug("Uploading to Vercel Blob")
-    let blob
+    serverDebug("Uploading to Vercel Blob with public access")
+    let blobResult
     try {
-      blob = await put(`documents/${documentId}/${sanitizedFileName}`, file, {
-        access: "public", // Changed from "private" to "public" to fix the error
+      blobResult = await put(`documents/${documentId}/${sanitizedFileName}`, file, {
+        access: "public",
+        addRandomSuffix: false, // Use our own naming scheme
       })
-      serverDebug("Blob upload successful:", blob.url)
+      serverDebug("Blob upload successful:", blobResult.url)
     } catch (blobError) {
       serverDebug("Blob upload error:", blobError)
       return NextResponse.json(
@@ -172,18 +179,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Store metadata in KV
+    // Validate the blob upload was successful
+    if (!blobResult.url || !blobResult.downloadUrl) {
+      throw new Error("Blob upload returned invalid URLs")
+    }
+
+    if (blobResult.size !== file.size) {
+      serverDebug("Size mismatch warning:", {
+        uploaded: blobResult.size,
+        original: file.size,
+      })
+    }
+
+    // Store metadata in Vercel KV
     serverDebug("Storing metadata in KV")
     try {
       await kv.set(`document:${documentId}`, {
         id: documentId,
         name: file.name,
-        type: file.type,
-        size: file.size,
-        url: blob.url,
-        uploadedAt: new Date().toISOString(),
+        url: blobResult.downloadUrl,
         status: "uploaded",
-        userId: data.user.id, // Associate with user
+        userId: data.user.id,
       })
       serverDebug("Metadata stored successfully")
     } catch (kvError) {
@@ -223,7 +239,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       id: documentId,
       name: file.name,
-      url: blob.url,
+      url: blobResult.downloadUrl,
       status: "uploaded",
     })
   } catch (error) {
