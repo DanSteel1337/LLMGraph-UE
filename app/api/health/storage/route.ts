@@ -7,17 +7,20 @@ export const runtime = "edge"
 
 import { requireAuth } from "../../../../lib/auth-server"
 import { cleanupOrphanedEntries } from "../../../../lib/documents/storage"
+import { debug } from "../../../../lib/utils/debug"
 import { kv } from "@vercel/kv"
 
 export async function GET() {
-  console.log("[HEALTH] Storage health check requested")
+  debug.log("[STORAGE HEALTH] Storage health check requested")
 
   try {
     // Simple auth check - throws if unauthorized
     const user = await requireAuth()
+    debug.log("[STORAGE HEALTH] User authenticated:", user.id)
 
     // Get all document-related keys
     const allKeys = await kv.keys("document:*")
+    debug.log("[STORAGE HEALTH] Found total keys:", allKeys.length)
 
     // Analyze key patterns
     const keysByDocId = new Map<string, string[]>()
@@ -53,12 +56,16 @@ export async function GET() {
       status: orphanedKeys.length === 0 ? "healthy" : "needs_cleanup",
     }
 
+    debug.log("[STORAGE HEALTH] Health status:", healthStatus.status, "Orphaned keys:", orphanedKeys.length)
+
     return Response.json({
       success: true,
       storage: healthStatus,
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
+    debug.error("[STORAGE HEALTH] Error:", error)
+
     if (error instanceof Error && error.message === "Unauthorized") {
       return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
         status: 401,
@@ -66,11 +73,11 @@ export async function GET() {
       })
     }
 
-    console.error("[HEALTH] Storage health check error:", error)
     return Response.json(
       {
         success: false,
         error: error instanceof Error ? error.message : "Storage health check failed",
+        timestamp: new Date().toISOString(),
       },
       { status: 500 },
     )
@@ -78,14 +85,16 @@ export async function GET() {
 }
 
 export async function POST() {
-  console.log("[HEALTH] Storage cleanup requested")
+  debug.log("[STORAGE HEALTH] Storage cleanup requested")
 
   try {
     // Simple auth check - throws if unauthorized
     const user = await requireAuth()
+    debug.log("[STORAGE HEALTH] User authenticated for cleanup:", user.id)
 
     // Perform cleanup
     const cleanupResult = await cleanupOrphanedEntries()
+    debug.log("[STORAGE HEALTH] Cleanup completed:", cleanupResult)
 
     return Response.json({
       success: true,
@@ -93,6 +102,8 @@ export async function POST() {
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
+    debug.error("[STORAGE HEALTH] Cleanup error:", error)
+
     if (error instanceof Error && error.message === "Unauthorized") {
       return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
         status: 401,
@@ -100,11 +111,11 @@ export async function POST() {
       })
     }
 
-    console.error("[HEALTH] Storage cleanup error:", error)
     return Response.json(
       {
         success: false,
         error: error instanceof Error ? error.message : "Storage cleanup failed",
+        timestamp: new Date().toISOString(),
       },
       { status: 500 },
     )

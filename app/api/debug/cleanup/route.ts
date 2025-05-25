@@ -2,31 +2,34 @@ import { type NextRequest, NextResponse } from "next/server"
 import { validateEnv } from "../../../../lib/utils/env"
 import { requireAuth } from "../../../../lib/auth-server"
 import { cleanupOrphanedEntries } from "../../../../lib/documents/storage"
+import { debug } from "../../../../lib/utils/debug"
 import { kv } from "@vercel/kv"
 
 export const runtime = "edge"
 
 export async function POST(request: NextRequest) {
+  debug.log("[DEBUG CLEANUP] Cleanup request received")
+
   try {
     validateEnv(["SUPABASE", "VERCEL_KV"])
 
     // Simple auth check - throws if unauthorized
     const user = await requireAuth()
+    debug.log("[DEBUG CLEANUP] User authenticated:", user.id)
 
     const body = await request.json()
     const { action } = body
-
-    console.log("[CLEANUP API] Received cleanup request:", action, "from user:", user.id)
+    debug.log("[DEBUG CLEANUP] Action requested:", action)
 
     switch (action) {
       case "cleanup":
         const result = await cleanupOrphanedEntries()
-        console.log("[CLEANUP API] Cleanup result:", result)
+        debug.log("[DEBUG CLEANUP] Cleanup result:", result)
         return NextResponse.json(result)
 
       case "list-keys":
         const allKeys = await kv.keys("document:*")
-        console.log("[CLEANUP API] Found keys:", allKeys.length)
+        debug.log("[DEBUG CLEANUP] Found keys:", allKeys.length)
         return NextResponse.json({ keys: allKeys, count: allKeys.length })
 
       case "clear-all":
@@ -34,13 +37,16 @@ export async function POST(request: NextRequest) {
         if (allKeysToDelete.length > 0) {
           await Promise.all(allKeysToDelete.map((key) => kv.del(key)))
         }
-        console.log("[CLEANUP API] Cleared all document keys:", allKeysToDelete.length)
+        debug.log("[DEBUG CLEANUP] Cleared all document keys:", allKeysToDelete.length)
         return NextResponse.json({ success: true, deleted: allKeysToDelete.length })
 
       default:
+        debug.warn("[DEBUG CLEANUP] Invalid action:", action)
         return NextResponse.json({ error: "Invalid action" }, { status: 400 })
     }
   } catch (error) {
+    debug.error("[DEBUG CLEANUP] Error:", error)
+
     if (error instanceof Error && error.message === "Unauthorized") {
       return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
         status: 401,
@@ -48,11 +54,11 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    console.error("[CLEANUP API] Error:", error)
     return NextResponse.json(
       {
         error: "Internal Server Error",
         message: error instanceof Error ? error.message : "Cleanup failed",
+        timestamp: new Date().toISOString(),
       },
       { status: 500 },
     )
@@ -60,11 +66,14 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  debug.log("[DEBUG CLEANUP] Key analysis requested")
+
   try {
     validateEnv(["SUPABASE", "VERCEL_KV"])
 
     // Simple auth check - throws if unauthorized
     const user = await requireAuth()
+    debug.log("[DEBUG CLEANUP] User authenticated for analysis:", user.id)
 
     // Get all document-related keys for inspection
     const allKeys = await kv.keys("document:*")
@@ -95,7 +104,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log("[CLEANUP API] Key analysis for user:", user.id, "Total keys:", allKeys.length)
+    debug.log("[DEBUG CLEANUP] Key analysis completed. Total keys:", allKeys.length)
 
     return NextResponse.json({
       total: allKeys.length,
@@ -105,8 +114,11 @@ export async function GET(request: NextRequest) {
         id: user.id,
         email: user.email || "",
       },
+      timestamp: new Date().toISOString(),
     })
   } catch (error) {
+    debug.error("[DEBUG CLEANUP] Analysis error:", error)
+
     if (error instanceof Error && error.message === "Unauthorized") {
       return new Response(JSON.stringify({ error: "Unauthorized", message: "Authentication required" }), {
         status: 401,
@@ -114,11 +126,11 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    console.error("[CLEANUP API] Error:", error)
     return NextResponse.json(
       {
         error: "Internal Server Error",
         message: error instanceof Error ? error.message : "Failed to analyze keys",
+        timestamp: new Date().toISOString(),
       },
       { status: 500 },
     )

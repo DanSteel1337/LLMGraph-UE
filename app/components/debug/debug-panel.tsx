@@ -13,8 +13,37 @@ interface DebugPanelProps {
   initialTab?: string
 }
 
+interface ServiceTest {
+  status: "success" | "error"
+  latency?: number
+  message: string
+  stats?: {
+    totalVectors?: number
+    dimension?: number
+  }
+}
+
+interface DebugData {
+  timestamp: string
+  user: {
+    id: string
+    email: string
+  }
+  environment: {
+    nodeEnv: string
+    debug: string
+    runtime: string
+    validation?: {
+      isValid: boolean
+      missing: string[]
+    }
+  }
+  tests: Record<string, ServiceTest>
+  services: Record<string, any>
+}
+
 export function DebugPanel({ initialTab = "health" }: DebugPanelProps) {
-  const [healthData, setHealthData] = useState<any>(null)
+  const [healthData, setHealthData] = useState<DebugData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
@@ -30,14 +59,15 @@ export function DebugPanel({ initialTab = "health" }: DebugPanelProps) {
       })
 
       if (!response.ok) {
-        throw new Error(`Health check failed with status: ${response.status}`)
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || `Health check failed with status: ${response.status}`)
       }
 
-      const data = await response.json()
+      const data: DebugData = await response.json()
       setHealthData(data)
 
       // Check for any errors in the results
-      const hasErrors = Object.values(data.tests).some((test: any) => test.status === "error")
+      const hasErrors = Object.values(data.tests || {}).some((test) => test.status === "error")
 
       if (hasErrors) {
         toast({
@@ -107,9 +137,18 @@ export function DebugPanel({ initialTab = "health" }: DebugPanelProps) {
                 </div>
               )}
 
-              {healthData && healthData.tests ? (
+              {healthData?.environment?.validation && !healthData.environment.validation.isValid && (
+                <div className="rounded-md bg-yellow-500/15 p-3 text-yellow-700">
+                  <div className="flex items-center">
+                    <AlertCircle className="h-4 w-4 mr-2" />
+                    <span>Missing environment variables: {healthData.environment.validation.missing.join(", ")}</span>
+                  </div>
+                </div>
+              )}
+
+              {healthData?.tests ? (
                 <div className="space-y-4">
-                  {Object.entries(healthData.tests).map(([service, data]: [string, any]) => (
+                  {Object.entries(healthData.tests).map(([service, data]: [string, ServiceTest]) => (
                     <div key={service} className="rounded-lg border p-4">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center">
@@ -128,7 +167,8 @@ export function DebugPanel({ initialTab = "health" }: DebugPanelProps) {
                       <div className="text-sm text-muted-foreground">
                         {data.status === "success" ? (
                           <div>
-                            <div>Latency: {data.latency}ms</div>
+                            {data.latency && <div>Latency: {data.latency}ms</div>}
+                            <div>Status: {data.message}</div>
                             {service === "pinecone" && data.stats && (
                               <div>
                                 <div>Total Vectors: {data.stats.totalVectors}</div>
@@ -165,49 +205,47 @@ export function DebugPanel({ initialTab = "health" }: DebugPanelProps) {
 
               <Separator />
 
-              {healthData ? (
+              {healthData?.services ? (
                 <div className="space-y-2">
                   {/* OpenAI */}
                   <div className="flex items-center justify-between rounded-lg border p-3">
                     <span className="font-mono text-sm">OPENAI_API_KEY</span>
-                    <CustomBadge variant={healthData.tests?.openai?.status === "success" ? "success" : "destructive"}>
-                      {healthData.tests?.openai?.status === "success" ? "Set" : "Missing"}
+                    <CustomBadge variant={healthData.services.openai ? "success" : "destructive"}>
+                      {healthData.services.openai ? "Set" : "Missing"}
                     </CustomBadge>
                   </div>
 
                   {/* Pinecone */}
-                  {["PINECONE_API_KEY", "PINECONE_INDEX_NAME", "PINECONE_HOST"].map((envVar) => (
-                    <div key={envVar} className="flex items-center justify-between rounded-lg border p-3">
-                      <span className="font-mono text-sm">{envVar}</span>
-                      <CustomBadge
-                        variant={healthData.tests?.pinecone?.status === "success" ? "success" : "destructive"}
-                      >
-                        {healthData.tests?.pinecone?.status === "success" ? "Set" : "Missing"}
-                      </CustomBadge>
-                    </div>
-                  ))}
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <span className="font-mono text-sm">PINECONE_*</span>
+                    <CustomBadge variant={healthData.services.pinecone ? "success" : "destructive"}>
+                      {healthData.services.pinecone ? "Set" : "Missing"}
+                    </CustomBadge>
+                  </div>
 
                   {/* KV */}
-                  {["KV_REST_API_URL", "KV_REST_API_TOKEN"].map((envVar) => (
-                    <div key={envVar} className="flex items-center justify-between rounded-lg border p-3">
-                      <span className="font-mono text-sm">{envVar}</span>
-                      <CustomBadge variant={healthData.tests?.kv?.status === "success" ? "success" : "destructive"}>
-                        {healthData.tests?.kv?.status === "success" ? "Set" : "Missing"}
-                      </CustomBadge>
-                    </div>
-                  ))}
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <span className="font-mono text-sm">VERCEL_KV</span>
+                    <CustomBadge variant={healthData.services.vercel_kv ? "success" : "destructive"}>
+                      {healthData.services.vercel_kv ? "Set" : "Missing"}
+                    </CustomBadge>
+                  </div>
 
                   {/* Supabase */}
-                  {["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"].map((envVar) => (
-                    <div key={envVar} className="flex items-center justify-between rounded-lg border p-3">
-                      <span className="font-mono text-sm">{envVar}</span>
-                      <CustomBadge
-                        variant={healthData.tests?.supabase?.status === "success" ? "success" : "destructive"}
-                      >
-                        {healthData.tests?.supabase?.status === "success" ? "Set" : "Missing"}
-                      </CustomBadge>
-                    </div>
-                  ))}
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <span className="font-mono text-sm">SUPABASE_*</span>
+                    <CustomBadge variant={healthData.services.supabase ? "success" : "destructive"}>
+                      {healthData.services.supabase ? "Set" : "Missing"}
+                    </CustomBadge>
+                  </div>
+
+                  {/* Vercel Blob */}
+                  <div className="flex items-center justify-between rounded-lg border p-3">
+                    <span className="font-mono text-sm">BLOB_READ_WRITE_TOKEN</span>
+                    <CustomBadge variant={healthData.services.vercel_blob ? "success" : "destructive"}>
+                      {healthData.services.vercel_blob ? "Set" : "Missing"}
+                    </CustomBadge>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
@@ -219,7 +257,12 @@ export function DebugPanel({ initialTab = "health" }: DebugPanelProps) {
         </Tabs>
       </CardContent>
       <CardFooter className="flex justify-between">
-        <div className="text-xs text-muted-foreground">Debug tools should be disabled in production</div>
+        <div className="text-xs text-muted-foreground">
+          Debug tools should be disabled in production
+          {healthData && (
+            <span className="ml-2">• Last check: {new Date(healthData.timestamp).toLocaleTimeString()}</span>
+          )}
+        </div>
       </CardFooter>
     </Card>
   )
